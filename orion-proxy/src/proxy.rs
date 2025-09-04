@@ -35,6 +35,7 @@ use orion_lib::{
     get_listeners_and_clusters, new_configuration_channel, runtime_config, ConfigurationReceivers,
     ConfigurationSenders, ListenerConfigurationChange, Result, SecretManager,
 };
+#[cfg(feature = "metrics")]
 use orion_metrics::{metrics::init_global_metrics, wait_for_metrics_setup, Metrics, VecMetrics};
 use parking_lot::RwLock;
 use smol_str::ToSmolStr;
@@ -89,6 +90,7 @@ struct ServiceInfo {
     ads_cluster_names: Vec<String>,
     access_log_config: Option<AccessLogConfig>,
     tracing: HashMap<TracingKey, TracingConfig>,
+    #[cfg (feature = "metrics")]
     metrics: Vec<Metrics>,
 }
 
@@ -106,7 +108,9 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
     // launch services runtime...
     //
 
+    #[cfg (feature = "metrics")]
     let metrics = VecMetrics::from(&bootstrap).0;
+    #[cfg (feature = "metrics")]
     let are_metrics_empty = metrics.is_empty();
 
     let tracing = bootstrap
@@ -147,6 +151,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         ads_cluster_names,
         access_log_config,
         tracing,
+        #[cfg (feature = "metrics")]
         metrics: metrics.clone(),
     };
 
@@ -157,6 +162,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         service_info,
     )?;
 
+    #[cfg (feature = "metrics")]
     if !are_metrics_empty {
         info!("Waiting for metrics setup to complete...");
         wait_for_metrics_setup();
@@ -171,6 +177,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
     info!("using {} runtimes with {num_threads_per_runtime} threads each", rt_config.num_runtimes());
 
     // initialize global metrics...
+    #[cfg (feature = "metrics")]
     init_global_metrics(&metrics, num_threads_per_runtime * num_runtimes);
 
     info!("Launching with {} cpus, {} runtimes", num_cpus, num_runtimes);
@@ -182,9 +189,10 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
                 spawn_proxy_runtime_from_thread(
                     "proxy",
                     num_threads_per_runtime,
-                    metrics.clone(),
                     rt_config.affinity_strategy.clone().map(|affinity| (RuntimeId(id), affinity)),
                     config_receivers,
+                    #[cfg (feature = "metrics")]
+                    metrics.clone(),
                 )
             })
             .collect::<Result<Vec<_>>>()?
@@ -205,14 +213,20 @@ type RuntimeHandle = JoinHandle<Result<()>>;
 fn spawn_proxy_runtime_from_thread(
     thread_name: &'static str,
     num_threads: usize,
-    metrics: Vec<Metrics>,
     affinity_info: Option<(RuntimeId, Affinity)>,
     configuration_receivers: ConfigurationReceivers,
+    #[cfg(feature = "metrics")]
+    metrics: Vec<Metrics>,
 ) -> Result<RuntimeHandle> {
     let thread_name = build_thread_name(thread_name, affinity_info.as_ref());
 
     let handle: JoinHandle<Result<()>> = thread::Builder::new().name(thread_name.clone()).spawn(move || {
-        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, Some(metrics));
+
+        #[cfg(feature = "metrics")]
+        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, metrics);
+        #[cfg(not(feature = "metrics"))]
+        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info);
+
         rt.block_on(async {
             tokio::select! {
                 _ = start_proxy(configuration_receivers) => {
@@ -238,7 +252,12 @@ fn spawn_services_runtime_from_thread(
     let thread_name = build_thread_name(thread_name, affinity_info.as_ref());
 
     let rt_handle = thread::Builder::new().name(thread_name.clone()).spawn(move || {
-        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, None);
+
+        #[cfg (feature = "metrics")]
+        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, vec![]);
+        #[cfg (not(feature = "metrics"))]
+        let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info);
+
         rt.block_on(async {
             tokio::select! {
                 result = spawn_services(service_info) => {
@@ -276,9 +295,9 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
         clusters,
         ads_cluster_names,
         access_log_config,
-        metrics,
-        #[allow(unused_variables)]
         tracing,
+        #[cfg (feature = "metrics")]
+        metrics,
     } = info;
     let mut set: JoinSet<Result<()>> = JoinSet::new();
 
@@ -327,10 +346,10 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
     }
 
     // spawn metrics exporter...
+    #[cfg (feature = "metrics")]
     if metrics.is_empty() {
         info!("OTEL metrics: stats_sink not configured (skipped)");
     } else {
-        #[cfg(feature = "tracing")]
         orion_metrics::otel_launch_exporter(&metrics).await?;
     }
 

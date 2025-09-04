@@ -42,13 +42,18 @@ use hyper_util::{
     client::legacy::{connect::Connect, Builder, Client},
     rt::tokio::{TokioExecutor, TokioTimer},
 };
-use opentelemetry::KeyValue;
 use orion_configuration::config::{
     cluster::http_protocol_options::{Codec, HttpProtocolOptions},
     network_filters::http_connection_manager::RetryPolicy,
 };
 use orion_format::types::{ResponseFlagsLong, ResponseFlagsShort};
-use orion_metrics::{metrics::clusters, with_metric};
+
+#[cfg( feature = "metrics")]
+use opentelemetry::KeyValue;
+#[cfg( feature = "metrics")]
+use orion_metrics::metrics::clusters;
+use crate::with_metric;
+
 use pingora_timeout::fast_timeout::fast_timeout;
 use pretty_duration::pretty_duration;
 use rustls::ClientConfig;
@@ -412,19 +417,19 @@ impl HttpChannel {
 
         match retry_policy {
             Some(policy) if policy.is_retriable(&req) => {
-                let (resp, dur, total_request) =
+                let (resp, dur, _total_request) =
                     self.send_with_retry(policy, sender, req, thread_id, cluster_name).await;
                 with_metric!(
                     clusters::UPSTREAM_RQ_TOTAL,
                     add,
-                    total_request as u64,
+                    _total_request as u64,
                     thread_id,
                     &[KeyValue::new("cluster", cluster_name)]
                 );
                 with_metric!(
                     clusters::UPSTREAM_RQ_RETRY,
                     add,
-                    (total_request - 1) as u64,
+                    (_total_request - 1) as u64,
                     thread_id,
                     &[KeyValue::new("cluster", cluster_name)]
                 );
@@ -444,8 +449,8 @@ impl HttpChannel {
         retry_policy: &RetryPolicy,
         sender: &Client<C, BodyWithMetrics<PolyBody>>,
         req: Request<BodyWithMetrics<PolyBody>>,
-        thread_id: ThreadId,
-        cluster_name: &'static str,
+        _thread_id: ThreadId,
+        _cluster_name: &'static str,
     ) -> (StdResult<Response<Incoming>, Error>, Duration, usize)
     where
         C: Connect + Clone + Send + Sync + 'static,
@@ -491,8 +496,8 @@ impl HttpChannel {
                     clusters::UPSTREAM_RQ_PER_TRY_TIMEOUT,
                     add,
                     1,
-                    thread_id,
-                    &[KeyValue::new("cluster", cluster_name)]
+                    _thread_id,
+                    &[KeyValue::new("cluster", _cluster_name)]
                 );
             }
 

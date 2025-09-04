@@ -17,7 +17,6 @@
 
 use tracing::info;
 
-#[cfg(feature = "metrics")]
 use crate::metrics::{
     clusters::init_clusters_metrics, http::init_http_metrics, listeners::init_listeners_metrics,
     server::init_server_metrics, tcp::init_tcp_metrics, tls::init_tls_metrics,
@@ -47,18 +46,12 @@ impl<T> Metric<T> {
 
 // This function initializes per-thread metrics based on the provided configuration.
 // It must be called in the context of each thread that needs to collect metrics (e.g. Tokio threads)
-#[cfg(feature = "metrics")]
 pub fn init_per_thread_metrics(_metrics: &[Metrics]) {
     info!("Initializing per-thread metrics...");
-}
-#[cfg(not(feature = "metrics"))]
-pub fn init_per_thread_metrics(_metrics: &[Metrics]) {
-    info!("Metrics feature is disabled, skipping per-thread metrics initialization.");
 }
 
 // This function initializes global metrics based on the provided configuration. Must be called once at application startup.
 //
-#[cfg(feature = "metrics")]
 pub fn init_global_metrics(_metrics: &[Metrics], number_of_threads: usize) {
     info!("Initializing global metrics...");
     init_tcp_metrics();
@@ -67,9 +60,4 @@ pub fn init_global_metrics(_metrics: &[Metrics], number_of_threads: usize) {
     init_listeners_metrics();
     init_clusters_metrics();
     init_server_metrics(number_of_threads);
-}
-
-#[cfg(not(feature = "metrics"))]
-pub fn init_global_metrics(_metrics: &[Metrics], _number_of_threads: usize) {
-    info!("Metrics feature is disabled, skipping global metrics initialization.");
 }

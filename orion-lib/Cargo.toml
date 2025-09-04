@@ -36,7 +36,7 @@ orion-error.workspace = true
 orion-format.workspace = true
 orion-http-header.workspace = true
 orion-interner.workspace = true
-orion-metrics.workspace = true
+orion-metrics = { workspace = true, optional = true }
 orion-tracing.workspace = true
 orion-xds.workspace = true
 parking_lot = "0.12.3"

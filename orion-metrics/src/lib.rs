@@ -23,7 +23,6 @@ pub mod sharded;
 use orion_configuration::config::{metrics::StatsSink, Bootstrap};
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "metrics")]
 use {
     opentelemetry::global,
     opentelemetry_otlp::{Protocol, WithExportConfig},
@@ -34,9 +33,7 @@ use {
     tracing::info,
 };
 
-#[cfg(feature = "metrics")]
 const DEFAULT_EXPORT_PERIOD: std::time::Duration = std::time::Duration::from_secs(5);
-#[cfg(feature = "metrics")]
 static SETUP_BARRIER: LazyLock<(Mutex<bool>, Condvar)> = LazyLock::new(|| (Mutex::new(false), Condvar::new()));
 
 pub struct VecMetrics(pub Vec<Metrics>);
@@ -72,7 +69,6 @@ impl From<&Bootstrap> for VecMetrics {
 // This function launches the metrics exporter based on the provided configuration.
 // It's designed to be called during the application startup to initialize the OpenTelemetry metrics exporter.
 //
-#[cfg(feature = "metrics")]
 pub async fn otel_launch_exporter(
     multi_metrics: &[Metrics],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -107,22 +103,6 @@ pub async fn otel_launch_exporter(
     Ok(())
 }
 
-#[cfg(not(feature = "metrics"))]
-pub async fn otel_launch_exporter(
-    _multi_metrics: &[Metrics],
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    Ok(())
-}
-
-#[cfg(feature = "metrics")]
-fn signal_setup_complete() {
-    let (lock, cvar) = &*SETUP_BARRIER;
-    let mut setup_complete = lock.lock();
-    *setup_complete = true;
-    cvar.notify_all();
-}
-
-#[cfg(feature = "metrics")]
 pub fn wait_for_metrics_setup() {
     let (lock, cvar) = &*SETUP_BARRIER;
     let mut setup_complete = lock.lock();
@@ -131,5 +111,9 @@ pub fn wait_for_metrics_setup() {
     }
 }
 
-#[cfg(not(feature = "metrics"))]
-pub fn wait_for_metrics_setup() {}
+fn signal_setup_complete() {
+    let (lock, cvar) = &*SETUP_BARRIER;
+    let mut setup_complete = lock.lock();
+    *setup_complete = true;
+    cvar.notify_all();
+}

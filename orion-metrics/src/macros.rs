@@ -15,7 +15,6 @@
 //
 //
 
-#[cfg(feature = "metrics")]
 macro_rules! init_observable_counter {
     ($counter: ident, $prefix: literal, $name: literal, $descr: literal) => {
         _ = $counter.set(Metric::new($prefix, $name, $descr, ShardedU64::new()));
@@ -32,7 +31,6 @@ macro_rules! init_observable_counter {
     };
 }
 
-#[cfg(feature = "metrics")]
 macro_rules! init_observable_gauge {
     ($counter: ident, $prefix: literal, $name: literal, $descr: literal) => {
         _ = $counter.set(Metric::new($prefix, $name, $descr, ShardedU64::new()));
@@ -46,47 +44,5 @@ macro_rules! init_observable_gauge {
                 });
             })
             .build();
-    };
-}
-
-#[macro_export]
-#[cfg(feature = "metrics")]
-macro_rules! with_metric {
-    ($counter: expr, $method: ident, $($args: expr),*) => {
-        $counter.get().inspect(|c| c.value.$method($($args),*));
-    };
-}
-#[macro_export]
-#[cfg(not(feature = "metrics"))]
-macro_rules! with_metric {
-    ($counter: expr, $method: ident, $($args: expr),*) => {
-        // No-op if metrics feature is not enabled
-        if false {
-            // This creates a tuple containing the results of the expressions,
-            // effectively "using" them without generating runtime code.
-            let _ = $counter;
-            let _ = ($($args),*);
-        }
-    };
-}
-
-#[macro_export]
-#[cfg(feature = "metrics")]
-macro_rules! with_histogram {
-    ($counter: expr, $method: ident, $($args: expr),*) => {
-        $counter.get().inspect(|c| c.$method($($args),*));
-    };
-}
-#[macro_export]
-#[cfg(not(feature = "metrics"))]
-macro_rules! with_histogram {
-    ($counter: expr, $method: ident, $($args: expr),*) => {
-        // No-op if metrics feature is not enabled
-        if false {
-            // This creates a tuple containing the results of the expressions,
-            // effectively "using" them without generating runtime code.
-            let _ = $counter;
-            let _ = ($($args),*);
-        }
     };
 }

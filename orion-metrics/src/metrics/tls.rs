@@ -18,12 +18,10 @@
 use std::{sync::OnceLock, thread::ThreadId};
 
 use crate::{metrics::Metric, sharded::ShardedU64};
-#[cfg(feature = "metrics")]
 use opentelemetry::global;
 
 pub static HANDSHAKES: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 
-#[cfg(feature = "metrics")]
 pub(crate) fn init_tls_metrics() {
     init_observable_counter!(HANDSHAKES, "tls", "handshake", "Number of TLS handshakes");
 }

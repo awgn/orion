@@ -62,7 +62,10 @@ use orion_format::context::{
 };
 
 use orion_format::LogFormatterLocal;
-use orion_metrics::{metrics::http, with_metric};
+#[cfg( feature = "metrics" )]
+use orion_metrics::metrics::http;
+use crate::with_metric;
+
 use parking_lot::Mutex;
 use route::MatchedRequest;
 use scopeguard::defer;
@@ -512,7 +515,7 @@ impl TransactionHandler {
                 ctx.access_loggers.lock().with_context(&DownstreamResponse { response: &response, response_head_size })
             }
 
-            let resp_head_size = response_head_size(&response);
+            let _resp_head_size = response_head_size(&response);
 
             response.map(move |body| {
                 BodyWithMetrics::new(BodyKind::Response, body, move |nbytes, flags| {
@@ -521,7 +524,7 @@ impl TransactionHandler {
                     with_metric!(
                         http::DOWNSTREAM_CX_TX_BYTES_TOTAL,
                         add,
-                        nbytes + resp_head_size as u64,
+                        nbytes + _resp_head_size as u64,
                         self.thread_id(),
                         &[KeyValue::new("listener", listener_name)]
                     );
@@ -560,7 +563,7 @@ impl TransactionHandler {
     fn trace_status_code(
         self: Arc<Self>,
         res: Result<Response<BodyWithMetrics<PolyBody>>>,
-        listener_name: &'static str,
+        _listener_name: &'static str,
     ) -> Result<Response<BodyWithMetrics<PolyBody>>> {
         if let Ok(response) = &res {
             let status_code = response.status().as_u16();
@@ -575,7 +578,7 @@ impl TransactionHandler {
                         add,
                         1,
                         self.thread_id(),
-                        &[KeyValue::new("listener", listener_name)]
+                        &[KeyValue::new("listener", _listener_name)]
                     );
                 },
                 200..300 => {
@@ -584,7 +587,7 @@ impl TransactionHandler {
                         add,
                         1,
                         self.thread_id(),
-                        &[KeyValue::new("listener", listener_name)]
+                        &[KeyValue::new("listener", _listener_name)]
                     );
                 },
                 300..400 => {
@@ -593,7 +596,7 @@ impl TransactionHandler {
                         add,
                         1,
                         self.thread_id(),
-                        &[KeyValue::new("listener", listener_name)]
+                        &[KeyValue::new("listener", _listener_name)]
                     );
                 },
                 400..500 => {
@@ -602,7 +605,7 @@ impl TransactionHandler {
                         add,
                         1,
                         self.thread_id(),
-                        &[KeyValue::new("listener", listener_name)]
+                        &[KeyValue::new("listener", _listener_name)]
                     );
                 },
                 500..600 => {
@@ -611,7 +614,7 @@ impl TransactionHandler {
                         add,
                         1,
                         self.thread_id(),
-                        &[KeyValue::new("listener", listener_name)]
+                        &[KeyValue::new("listener", _listener_name)]
                     );
 
                     with_server_span!(self.span_state, |srv_span: &mut BoxedSpan| {
@@ -630,7 +633,7 @@ impl TransactionHandler {
                 add,
                 1,
                 self.thread_id(),
-                &[KeyValue::new("listener", listener_name)]
+                &[KeyValue::new("listener", _listener_name)]
             );
 
             with_server_span!(self.span_state, |srv_span: &mut BoxedSpan| {
@@ -800,6 +803,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
     type Error = crate::Error;
     type Future = BoxFuture<'static, StdResult<Self::Response, Self::Error>>;
 
+    #[allow(clippy::too_many_lines)]
     fn call(&self, req: ExtendedRequest<Incoming>) -> Self::Future {
         // 0. destructure the ExtendedRequest to get the request and addresses
         let ExtendedRequest { request, downstream_metadata } = req;
@@ -891,7 +895,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             let permit_clone = Arc::clone(&permit);
             let init_flags = request.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
-            let req_head_size = request_head_size(&request);
+            let _req_head_size = request_head_size(&request);
             let request = request.map(|body| {
                 let trans_handler = Arc::clone(&trans_handler);
                 BodyWithMetrics::new(BodyKind::Request, body, move |nbytes, flags| {
@@ -900,7 +904,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                     with_metric!(
                         http::DOWNSTREAM_CX_RX_BYTES_TOTAL,
                         add,
-                        nbytes + req_head_size as u64,
+                        nbytes + _req_head_size as u64,
                         trans_handler.thread_id(),
                         &[KeyValue::new("listener", listener_name)]
                     );
@@ -961,7 +965,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
 
                 let init_flags = resp.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
-                let resp_head_size = response_head_size(&resp);
+                let _resp_head_size = response_head_size(&resp);
 
                 let response = resp.map(|body| {
                     BodyWithMetrics::new(BodyKind::Response, body, move |nbytes, flags| {
@@ -971,7 +975,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                         with_metric!(
                             http::DOWNSTREAM_CX_TX_BYTES_TOTAL,
                             add,
-                            nbytes + resp_head_size as u64,
+                            nbytes + _resp_head_size as u64,
                             trans_handler.thread_id(),
                             &[KeyValue::new("listener", listener_name)]
                         );

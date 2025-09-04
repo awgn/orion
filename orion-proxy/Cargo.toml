@@ -10,14 +10,6 @@ version.workspace      = true
 name = "orion"
 path = "src/main.rs"
 
-[features]
-config-dump = []
-dhat-heap   = ["dep:dhat"]
-jemalloc    = ["dep:tikv-jemallocator", "orion-metrics/jemalloc"]
-metrics     = ["orion-metrics/metrics"]
-prometheus  = ["metrics"]
-tracing     = []
-
 [dependencies]
 abort-on-drop.workspace        = true
 dhat                           = { version = "0.3.3", optional = true }
@@ -27,7 +19,7 @@ orion-configuration.workspace  = true
 orion-error.workspace          = true
 orion-format.workspace         = true
 orion-lib.workspace            = true
-orion-metrics.workspace        = true
+orion-metrics                  = { workspace = true, optional = true }
 orion-tracing.workspace        = true
 orion-xds.workspace            = true
 parking_lot                    = "0.12.3"
@@ -52,6 +44,15 @@ tracing-subscriber = { workspace = true, features = [
   "registry",
   "std",
 ] }
+
+[features]
+config-dump = []
+dhat-heap   = ["dep:dhat"]
+jemalloc    = ["dep:tikv-jemallocator", "orion-metrics/jemalloc"]
+metrics     = ["dep:orion-metrics", "orion-lib/metrics"]
+prometheus  = ["metrics"]
+tracing     = []
+
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "0.6", optional = true }

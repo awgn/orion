@@ -19,6 +19,7 @@
 
 pub mod configuration;
 
+pub mod macros;
 pub mod access_log;
 mod body;
 pub mod clusters;

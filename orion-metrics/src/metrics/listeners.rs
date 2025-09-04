@@ -18,7 +18,6 @@
 use std::{sync::OnceLock, thread::ThreadId};
 
 use crate::{metrics::Metric, sharded::ShardedU64};
-#[cfg(feature = "metrics")]
 use opentelemetry::global;
 use opentelemetry::metrics::Histogram;
 
@@ -28,7 +27,6 @@ pub static DOWNSTREAM_CX_ACTIVE: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLo
 pub static NO_FILTER_CHAIN_MATCH: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 pub static DOWNSTREAM_CX_LENGTH_MS: OnceLock<Histogram<u64>> = OnceLock::new();
 
-#[cfg(feature = "metrics")]
 pub(crate) fn init_listeners_metrics() {
     _ = DOWNSTREAM_CX_LENGTH_MS.set(
         global::meter("orion.listeners")

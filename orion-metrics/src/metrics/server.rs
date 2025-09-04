@@ -18,10 +18,8 @@
 use crate::{metrics::Metric, sharded::ShardedU64};
 use std::{sync::OnceLock, thread::ThreadId};
 
-#[cfg(feature = "metrics")]
 use {opentelemetry::global, std::time::Instant};
 
-#[cfg(feature = "metrics")]
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
 pub static UPTIME: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
@@ -30,10 +28,8 @@ pub static MEMORY_HEAP_SIZE: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::
 pub static MEMORY_PHYSICAL_SIZE: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 pub static MEMORY_ALLOCATED: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 
-#[cfg(feature = "metrics")]
 const SERVER_PREFIX: &str = "orion.server";
 
-#[cfg(feature = "metrics")]
 pub fn update_server_metrics() {
     let shard_id = std::thread::current().id();
     let uptime = util::server_uptime();
@@ -68,10 +64,6 @@ pub fn update_server_metrics() {
         .store(memory_allocated, shard_id, &[]);
 }
 
-#[cfg(not(feature = "metrics"))]
-pub fn update_server_metrics() {}
-
-#[cfg(feature = "metrics")]
 pub(crate) fn init_server_metrics(number_of_threads: usize) {
     _ = STARTUP_TIME.set(Instant::now());
     let shard_id = std::thread::current().id();
@@ -120,7 +112,6 @@ pub(crate) fn init_server_metrics(number_of_threads: usize) {
         .build();
 }
 
-#[cfg(feature = "metrics")]
 mod util {
     /// Return the physical memory allocated by the process.
     ///

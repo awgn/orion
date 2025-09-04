@@ -16,7 +16,6 @@
 //
 
 use crate::{metrics::Metric, sharded::ShardedU64};
-#[cfg(feature = "metrics")]
 use opentelemetry::global;
 use std::{sync::OnceLock, thread::ThreadId};
 
@@ -39,7 +38,6 @@ pub static UPSTREAM_CX_ACTIVE: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock
 pub static UPSTREAM_CX_CONNECT_FAIL: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 pub static UPSTREAM_CX_CONNECT_TIMEOUT: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 
-#[cfg(feature = "metrics")]
 pub(crate) fn init_clusters_metrics() {
     init_observable_counter!(UPSTREAM_RQ_TOTAL, "cluster", "upstream_rq_total", "Total number of upstream requests");
     init_observable_gauge!(UPSTREAM_RQ_ACTIVE, "cluster", "upstream_rq_active", "Number of active upstream requests");

@@ -17,7 +17,6 @@
 
 use crate::{metrics::Metric, sharded::ShardedU64};
 
-#[cfg(feature = "metrics")]
 use opentelemetry::global;
 use opentelemetry::metrics::Histogram;
 use std::{sync::OnceLock, thread::ThreadId};
@@ -40,7 +39,6 @@ pub static DOWNSTREAM_RQ_ACTIVE: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLo
 pub static DOWNSTREAM_CX_RX_BYTES_TOTAL: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 pub static DOWNSTREAM_CX_TX_BYTES_TOTAL: OnceLock<Metric<ShardedU64<ThreadId>>> = OnceLock::new();
 
-#[cfg(feature = "metrics")]
 pub(crate) fn init_http_metrics() {
     _ = DOWNSTREAM_CX_LENGTH_MS.set(
         global::meter("orion.http")

@@ -18,7 +18,10 @@
 use crate::core_affinity::{self, AffinityStrategy};
 use orion_configuration::config::runtime::Affinity;
 use orion_lib::runtime_config;
+
+#[cfg (feature = "metrics")]
 use orion_metrics::{metrics::init_per_thread_metrics, Metrics};
+
 use std::{fmt::Display, ops::Deref};
 use tokio::runtime::{Builder, Runtime};
 use tracing::{info, warn};
@@ -46,7 +49,8 @@ pub fn build_tokio_runtime(
     thread_name: &str,
     num_threads: usize,
     affinity_info: Option<(RuntimeId, Affinity)>,
-    metrics: Option<Vec<Metrics>>,
+    #[cfg (feature = "metrics")]
+    metrics: Vec<Metrics>,
 ) -> Runtime {
     let config = runtime_config();
 
@@ -70,7 +74,7 @@ pub fn build_tokio_runtime(
         }
     }
 
-    let (mut builder, current_thread) = if num_threads <= 1 {
+    let (mut builder, _current_thread) = if num_threads <= 1 {
         let mut b = Builder::new_current_thread();
         b.enable_all();
         (b, true)
@@ -86,12 +90,11 @@ pub fn build_tokio_runtime(
 
     // initialize per-thread metrics...
     //
-    if let Some(metrics) = metrics {
-        if current_thread {
-            init_per_thread_metrics(&metrics);
-        } else {
-            builder.on_thread_start(move || init_per_thread_metrics(&metrics));
-        }
+    #[cfg (feature = "metrics")]
+    if _current_thread {
+        init_per_thread_metrics(&metrics);
+    } else {
+        builder.on_thread_start(move || init_per_thread_metrics(&metrics));
     }
 
     #[allow(clippy::expect_used)]

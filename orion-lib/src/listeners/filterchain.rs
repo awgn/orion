@@ -29,7 +29,6 @@ use futures::TryFutureExt;
 use hyper::{service::Service, Request};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as HyperServerBuilder;
-use opentelemetry::KeyValue;
 use orion_configuration::config::{
     listener::{FilterChain as FilterChainConfig, MainFilter},
     network_filters::{
@@ -37,10 +36,17 @@ use orion_configuration::config::{
         network_rbac::{NetworkContext, NetworkRbac},
     },
 };
+
+#[cfg( feature = "metrics" )]
+use opentelemetry::KeyValue;
+
+#[cfg( feature = "metrics" )]
 use orion_metrics::{
     metrics::{http, tcp, tls},
-    with_histogram, with_metric,
 };
+
+use crate::{with_histogram, with_metric};
+
 use rustls::{server::Acceptor, ServerConfig};
 use scopeguard::defer;
 use smol_str::SmolStr;
@@ -165,24 +171,25 @@ impl FilterchainType {
         Some(stream)
     }
 
+    #[allow(clippy::used_underscore_binding)]
     pub async fn start_filterchain(
         &self,
         stream: AsyncStream,
         downstream_metadata: Arc<DownstreamConnectionMetadata>,
-        shard_id: ThreadId,
+        _shard_id: ThreadId,
         listener_name: &'static str,
         start_instant: std::time::Instant,
     ) -> Result<()> {
         let Self { config, handler } = self;
         match handler {
             ConnectionHandler::Http(http_connection_manager) => {
-                with_metric!(http::DOWNSTREAM_CX_TOTAL, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                with_metric!(http::DOWNSTREAM_CX_ACTIVE, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
+                with_metric!(http::DOWNSTREAM_CX_TOTAL, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                with_metric!(http::DOWNSTREAM_CX_ACTIVE, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
                 defer! {
-                    with_metric!(http::DOWNSTREAM_CX_DESTROY, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                    with_metric!(http::DOWNSTREAM_CX_ACTIVE, sub, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                    let ms = u64::try_from(start_instant.elapsed().as_millis()).unwrap_or(u64::MAX);
-                    with_histogram!(http::DOWNSTREAM_CX_LENGTH_MS, record, ms, &[KeyValue::new("listener", listener_name)]);
+                    with_metric!(http::DOWNSTREAM_CX_DESTROY, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                    with_metric!(http::DOWNSTREAM_CX_ACTIVE, sub, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                    let _ms = u64::try_from(start_instant.elapsed().as_millis()).unwrap_or(u64::MAX);
+                    with_histogram!(http::DOWNSTREAM_CX_LENGTH_MS, record, _ms, &[KeyValue::new("listener", listener_name)]);
                 }
 
                 let req_handler = http_connection_manager.request_handler();
@@ -197,7 +204,7 @@ impl FilterchainType {
                     let (stream, negotiated) =
                         start_tls(http_connection_manager.listener_name, stream, tls_configurator, Some(codec_type))
                             .await?;
-                    with_metric!(tls::HANDSHAKES, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
+                    with_metric!(tls::HANDSHAKES, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
 
                     // if we negotiated a protocol over ALPN, use that instead of the configured CodecType.
                     // since we use codec_type to determine our alpn response, we will never negotiate a protocol not covered by codec_type
@@ -242,13 +249,13 @@ impl FilterchainType {
                     .map_err(Error::from)
             },
             ConnectionHandler::Tcp(tcp_proxy) => {
-                with_metric!(tcp::DOWNSTREAM_CX_TOTAL, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                with_metric!(tcp::DOWNSTREAM_CX_ACTIVE, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
+                with_metric!(tcp::DOWNSTREAM_CX_TOTAL, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                with_metric!(tcp::DOWNSTREAM_CX_ACTIVE, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
                 defer! {
-                    with_metric!(tcp::DOWNSTREAM_CX_DESTROY, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                    with_metric!(tcp::DOWNSTREAM_CX_ACTIVE, sub, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
-                    let ms = u64::try_from(start_instant.elapsed().as_millis()).unwrap_or(u64::MAX);
-                    with_histogram!(tcp::DOWNSTREAM_CX_LENGTH_MS, record, ms, &[KeyValue::new("listener", listener_name)]);
+                    with_metric!(tcp::DOWNSTREAM_CX_DESTROY, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                    with_metric!(tcp::DOWNSTREAM_CX_ACTIVE, sub, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                    let _ms = u64::try_from(start_instant.elapsed().as_millis()).unwrap_or(u64::MAX);
+                    with_histogram!(tcp::DOWNSTREAM_CX_LENGTH_MS, record, _ms, &[KeyValue::new("listener", listener_name)]);
                 }
 
                 let tcp_proxy = tcp_proxy.clone();

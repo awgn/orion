@@ -25,16 +25,21 @@ use crate::{
     transport::{bind_device::BindDevice, tls_inspector, AsyncStream, ProxyProtocolReader},
     ConversionContext, Error, Result, RouteConfigurationChange,
 };
-use opentelemetry::KeyValue;
 use orion_configuration::config::{
     listener::{FilterChainMatch, Listener as ListenerConfig, MatchResult},
     listener_filters::DownstreamProxyProtocolConfig,
 };
 use orion_interner::StringInterner;
+
+#[cfg(feature = "metrics")]
+use opentelemetry::KeyValue;
+
+#[cfg(feature = "metrics")]
 use orion_metrics::{
     metrics::{http, listeners},
-    with_histogram, with_metric,
 };
+use crate::{with_metric, with_histogram};
+
 use rustls::ServerConfig;
 use scopeguard::defer;
 use std::{
@@ -202,7 +207,7 @@ impl Listener {
         info!("listener '{name}' started: {local_address}");
         let mut filter_chains = Arc::new(filter_chains);
         let proxy_protocol_config = proxy_protocol_config.map(Arc::new);
-        let listener_name = name;
+        let _listener_name = name;
 
         loop {
             tokio::select! {
@@ -214,9 +219,9 @@ impl Listener {
                             let start = std::time::Instant::now();
 
                             // This is a new downstream connection...
-                            let shard_id = std::thread::current().id();
-                            with_metric!(listeners::DOWNSTREAM_CX_TOTAL, add, 1, shard_id,&[KeyValue::new("listener", listener_name)]);
-                            with_metric!(listeners::DOWNSTREAM_CX_ACTIVE, add, 1, shard_id,&[KeyValue::new("listener", listener_name)]);
+                            let _shard_id = std::thread::current().id();
+                            with_metric!(listeners::DOWNSTREAM_CX_TOTAL, add, 1, _shard_id,&[KeyValue::new("listener", _listener_name)]);
+                            with_metric!(listeners::DOWNSTREAM_CX_ACTIVE, add, 1, _shard_id,&[KeyValue::new("listener", _listener_name)]);
 
                             let filter_chains = Arc::clone(&filter_chains);
                             let proxy_protocol_config = proxy_protocol_config.clone();
@@ -362,9 +367,8 @@ impl Listener {
             if ssl.load(Ordering::Relaxed) {
                 with_metric!(http::DOWNSTREAM_CX_SSL_ACTIVE, add, 1, shard_id, &[KeyValue::new("listener", listener_name)]);
             }
-            let ms = u64::try_from(start_instant.elapsed().as_millis())
-                .unwrap_or(u64::MAX);
-            with_histogram!(listeners::DOWNSTREAM_CX_LENGTH_MS, record, ms, &[KeyValue::new("listener", listener_name)]);
+            let _ms = u64::try_from(start_instant.elapsed().as_millis()).unwrap_or(u64::MAX);
+            with_histogram!(listeners::DOWNSTREAM_CX_LENGTH_MS, record, _ms, &[KeyValue::new("listener", listener_name)]);
         }
 
         let downstream_metadata = if let Some(config) = proxy_protocol_config.as_ref() {

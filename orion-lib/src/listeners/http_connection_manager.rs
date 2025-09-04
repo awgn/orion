@@ -582,6 +582,7 @@ impl TransactionHandler {
         })
     }
 
+    #[allow(clippy::used_underscore_binding)]
     fn trace_status_code(
         self: Arc<Self>,
         res: Result<Response<BodyWithMetrics<PolyBody>>>,
@@ -826,6 +827,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
     type Future = BoxFuture<'static, StdResult<Self::Response, Self::Error>>;
 
     #[allow(clippy::too_many_lines)]
+    #[allow(clippy::used_underscore_binding)]
     fn call(&self, req: ExtendedRequest<Incoming>) -> Self::Future {
         // 0. destructure the ExtendedRequest to get the request and addresses
         let ExtendedRequest { request, downstream_metadata } = req;
@@ -1080,6 +1082,7 @@ fn eval_http_init_context<R>(request: &Request<R>, trans_handler: &TransactionHa
     }
 }
 
+#[allow(clippy::used_underscore_binding)]
 fn eval_http_finish_context(
     _access_loggers: &mut Vec<LogFormatterLocal>,
     _trans_start_time: Instant,

@@ -48,11 +48,11 @@ use orion_configuration::config::{
 };
 use orion_format::types::{ResponseFlagsLong, ResponseFlagsShort};
 
-#[cfg( feature = "metrics")]
-use opentelemetry::KeyValue;
-#[cfg( feature = "metrics")]
-use orion_metrics::metrics::clusters;
 use crate::with_metric;
+#[cfg(feature = "metrics")]
+use opentelemetry::KeyValue;
+#[cfg(feature = "metrics")]
+use orion_metrics::metrics::clusters;
 
 use pingora_timeout::fast_timeout::fast_timeout;
 use pretty_duration::pretty_duration;

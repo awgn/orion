@@ -19,13 +19,14 @@
 
 pub mod configuration;
 
-pub mod macros;
 pub mod access_log;
 mod body;
 pub mod clusters;
 mod listeners;
+pub mod metrics;
 mod secrets;
 pub(crate) mod thread_local;
+pub mod tracing_attributes;
 mod transport;
 mod utils;
 

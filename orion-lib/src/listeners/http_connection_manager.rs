@@ -35,11 +35,19 @@ use core::time::Duration;
 use futures::future::BoxFuture;
 use hyper::{body::Incoming, service::Service, Request, Response};
 use opentelemetry::global::BoxedSpan;
-use opentelemetry::trace::{Span, Status};
-use opentelemetry::KeyValue;
+
 use orion_configuration::config::GenericError;
-use orion_tracing::span_state::SpanState;
-use orion_tracing::{attributes::HTTP_RESPONSE_STATUS_CODE, with_client_span, with_server_span};
+
+#[cfg(any(feature = "tracing", feature = "metrics"))]
+use opentelemetry::KeyValue;
+
+#[cfg(feature = "tracing")]
+use {
+    crate::tracing_attributes::set_attributes_from_request, crate::tracing_attributes::HTTP_RESPONSE_STATUS_CODE,
+    opentelemetry::trace::Span, opentelemetry::trace::Status,
+};
+
+use crate::{with_client_span, with_server_span};
 use smol_str::{SmolStr, ToSmolStr};
 
 use orion_configuration::config::network_filters::http_connection_manager::http_filters::{
@@ -61,10 +69,10 @@ use orion_format::context::{
     DownstreamResponse, FinishContext, HttpRequestDuration, HttpResponseDuration, InitHttpContext,
 };
 
-use orion_format::LogFormatterLocal;
-#[cfg( feature = "metrics" )]
-use orion_metrics::metrics::http;
 use crate::with_metric;
+use orion_format::LogFormatterLocal;
+#[cfg(feature = "metrics")]
+use orion_metrics::metrics::http;
 
 use parking_lot::Mutex;
 use route::MatchedRequest;
@@ -96,9 +104,16 @@ use crate::{
     utils::http::{request_head_size, response_head_size},
     ConversionContext, PolyBody, Result, RouteConfiguration,
 };
-use orion_tracing::http_tracer::{HttpTracer, SpanKind, SpanName};
-use orion_tracing::request_id::{RequestId, RequestIdManager};
-use orion_tracing::trace_context::TraceContext;
+
+#[cfg(feature = "tracing")]
+use orion_tracing::http_tracer::{SpanKind, SpanName};
+
+use orion_tracing::{
+    http_tracer::HttpTracer,
+    request_id::{RequestId, RequestIdManager},
+    span_state::SpanState,
+    trace_context::TraceContext,
+};
 
 #[derive(Debug, Clone)]
 pub struct HttpConnectionManagerBuilder {
@@ -472,6 +487,7 @@ impl TransactionHandler {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn thread_id(&self) -> ThreadId {
         self.thread_id
     }
@@ -807,17 +823,21 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
     fn call(&self, req: ExtendedRequest<Incoming>) -> Self::Future {
         // 0. destructure the ExtendedRequest to get the request and addresses
         let ExtendedRequest { request, downstream_metadata } = req;
+
+        #[cfg(feature = "tracing")]
         let incoming_request_id = RequestId::from_request(&request);
 
         // 1. apply x_request_id policy first...
         let (mut updated_request, request_id) = self.manager.request_id_handler.apply_policy(request);
 
         // 2. create a trace context and SERVER span, if enabled...
+        #[cfg(feature = "tracing")]
         let trace_context = self
             .manager
             .http_tracer
             .try_build_trace_context(&updated_request, incoming_request_id.or(Some(request_id.clone())));
 
+        #[cfg(feature = "tracing")]
         let mut server_span = self.manager.http_tracer.try_create_span(
             trace_context.as_ref(),
             &self.manager.get_tracing_key(),
@@ -826,16 +846,23 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
         );
 
         // set default attributes to span, using downstream request information...
+        #[cfg(feature = "tracing")]
         if let Some(span) = server_span.as_mut() {
-            self.manager.http_tracer.set_attributes_from_request(span, &updated_request);
+            set_attributes_from_request(span, &updated_request);
         }
 
         // 3. create the transaction context
         let trans_handler = Arc::new(TransactionHandler::new(
             &self.manager.access_log,
+            #[cfg(feature = "tracing")]
             trace_context,
+            #[cfg(not(feature = "tracing"))]
+            None,
             request_id,
+            #[cfg(feature = "tracing")]
             server_span,
+            #[cfg(not(feature = "tracing"))]
+            None,
             std::thread::current().id(),
         ));
 
@@ -952,6 +979,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                     &[KeyValue::new("listener", listener_name)]
                 );
 
+                #[cfg(feature = "tracing")]
                 if let Some(state) = trans_handler.span_state.as_ref() {
                     if let Some(ref mut span) = *state.server_span.lock() {
                         span.set_attribute(KeyValue::new(HTTP_RESPONSE_STATUS_CODE, 400));
@@ -1025,6 +1053,7 @@ fn eval_http_init_context<R>(request: &Request<R>, trans_handler: &TransactionHa
     if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
         let trace_id =
             trans_handler.trace_ctx.as_ref().and_then(|t| t.map_child(orion_tracing::trace_info::TraceInfo::trace_id));
+
         let request_head_size = request_head_size(request);
         ctx.access_loggers.lock().with_context_fn(|| InitHttpContext {
             start_time: std::time::SystemTime::now(),

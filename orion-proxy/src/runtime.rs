@@ -19,7 +19,7 @@ use crate::core_affinity::{self, AffinityStrategy};
 use orion_configuration::config::runtime::Affinity;
 use orion_lib::runtime_config;
 
-#[cfg (feature = "metrics")]
+#[cfg(feature = "metrics")]
 use orion_metrics::{metrics::init_per_thread_metrics, Metrics};
 
 use std::{fmt::Display, ops::Deref};
@@ -49,8 +49,7 @@ pub fn build_tokio_runtime(
     thread_name: &str,
     num_threads: usize,
     affinity_info: Option<(RuntimeId, Affinity)>,
-    #[cfg (feature = "metrics")]
-    metrics: Vec<Metrics>,
+    #[cfg(feature = "metrics")] metrics: Vec<Metrics>,
 ) -> Runtime {
     let config = runtime_config();
 
@@ -90,7 +89,7 @@ pub fn build_tokio_runtime(
 
     // initialize per-thread metrics...
     //
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     if _current_thread {
         init_per_thread_metrics(&metrics);
     } else {

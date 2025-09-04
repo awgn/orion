@@ -37,13 +37,11 @@ use orion_configuration::config::{
     },
 };
 
-#[cfg( feature = "metrics" )]
+#[cfg(feature = "metrics")]
 use opentelemetry::KeyValue;
 
-#[cfg( feature = "metrics" )]
-use orion_metrics::{
-    metrics::{http, tcp, tls},
-};
+#[cfg(feature = "metrics")]
+use orion_metrics::metrics::{http, tcp, tls};
 
 use crate::{with_histogram, with_metric};
 
@@ -184,7 +182,13 @@ impl FilterchainType {
         match handler {
             ConnectionHandler::Http(http_connection_manager) => {
                 with_metric!(http::DOWNSTREAM_CX_TOTAL, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
-                with_metric!(http::DOWNSTREAM_CX_ACTIVE, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
+                with_metric!(
+                    http::DOWNSTREAM_CX_ACTIVE,
+                    add,
+                    1,
+                    _shard_id,
+                    &[KeyValue::new("listener", listener_name)]
+                );
                 defer! {
                     with_metric!(http::DOWNSTREAM_CX_DESTROY, add, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);
                     with_metric!(http::DOWNSTREAM_CX_ACTIVE, sub, 1, _shard_id, &[KeyValue::new("listener", listener_name)]);

@@ -50,8 +50,8 @@ config-dump = []
 dhat-heap   = ["dep:dhat"]
 jemalloc    = ["dep:tikv-jemallocator", "orion-metrics/jemalloc"]
 metrics     = ["dep:orion-metrics", "orion-lib/metrics"]
+tracing     = ["orion-lib/tracing"]
 prometheus  = ["metrics"]
-tracing     = []
 
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

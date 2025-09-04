@@ -29,10 +29,12 @@ use crate::{
     transport::policy::{RequestContext, RequestExt},
     PolyBody, Result,
 };
+
+#[cfg(feature = "tracing")]
+use crate::tracing_attributes::set_attributes_from_request;
+
 use http::{uri::Parts as UriParts, Uri};
 use hyper::{body::Incoming, Request, Response};
-use opentelemetry::trace::Span;
-use opentelemetry::KeyValue;
 use orion_configuration::config::network_filters::http_connection_manager::{
     route::{RouteAction, RouteMatchResult},
     RetryPolicy,
@@ -42,8 +44,14 @@ use orion_format::{
     context::{UpstreamContext, UpstreamRequest},
     types::{ResponseFlagsLong, ResponseFlagsShort},
 };
-use orion_tracing::attributes::{UPSTREAM_ADDRESS, UPSTREAM_CLUSTER_NAME};
-use orion_tracing::http_tracer::{SpanKind, SpanName};
+#[cfg(feature = "tracing")]
+use {
+    crate::tracing_attributes::{UPSTREAM_ADDRESS, UPSTREAM_CLUSTER_NAME},
+    opentelemetry::trace::Span,
+    opentelemetry::KeyValue,
+    orion_tracing::http_tracer::{SpanKind, SpanName},
+};
+
 use smol_str::ToSmolStr;
 use std::net::SocketAddr;
 use tracing::debug;
@@ -61,7 +69,7 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
     async fn to_response(
         self,
         trans_handler: &TransactionHandler,
-        (request, connection_manager): (MatchedRequest<'a>, &HttpConnectionManager),
+        (request, _connection_manager): (MatchedRequest<'a>, &HttpConnectionManager),
     ) -> Result<Response<PolyBody>> {
         let MatchedRequest {
             request: downstream_request,
@@ -110,16 +118,18 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
                     Request::from_parts(parts, body.map_into())
                 };
 
-                let mut client_span = connection_manager.http_tracer.try_create_span(
+                #[cfg(feature = "tracing")]
+                let mut client_span = _connection_manager.http_tracer.try_create_span(
                     trans_handler.trace_ctx.as_ref(),
-                    &connection_manager.get_tracing_key(),
+                    &_connection_manager.get_tracing_key(),
                     SpanKind::Client,
                     SpanName::Str::<()>(svc_channel.upstream_authority.as_str()),
                 );
 
+                #[cfg(feature = "tracing")]
                 if let Some(ref mut client_span) = client_span {
                     // set default attributes to span, using upstream request information...
-                    connection_manager.http_tracer.set_attributes_from_request(client_span, &upstream_request);
+                    set_attributes_from_request(client_span, &upstream_request);
 
                     // set additional attributes for client span...
                     client_span.set_attributes([
@@ -129,6 +139,7 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
                 }
 
                 // ... store the span in the span_state
+                #[cfg(feature = "tracing")]
                 if let Some(ref span_state) = trans_handler.span_state {
                     *span_state.client_span.lock() = client_span;
                 }

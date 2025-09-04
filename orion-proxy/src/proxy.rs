@@ -22,13 +22,11 @@ use crate::{
     xds_configurator::XdsConfigurationHandler,
 };
 use futures::future::join_all;
-use orion_configuration::config::{
-    bootstrap::Node,
-    log::AccessLogConfig,
-    network_filters::tracing::{TracingConfig, TracingKey},
-    runtime::Affinity,
-    Bootstrap,
-};
+use orion_configuration::config::{bootstrap::Node, log::AccessLogConfig, runtime::Affinity, Bootstrap};
+
+#[cfg(feature = "tracing")]
+use orion_configuration::config::network_filters::tracing::{TracingConfig, TracingKey};
+
 use orion_error::Context;
 use orion_lib::{
     access_log::{start_access_loggers, update_configuration, Target},
@@ -40,10 +38,13 @@ use orion_metrics::{metrics::init_global_metrics, wait_for_metrics_setup, Metric
 use parking_lot::RwLock;
 use smol_str::ToSmolStr;
 use std::{
-    collections::HashMap,
     sync::Arc,
     thread::{self, JoinHandle},
 };
+
+#[cfg(feature = "tracing")]
+use std::collections::HashMap;
+
 use tokio::{sync::mpsc::Sender, task::JoinSet};
 use tracing::{debug, info, warn};
 
@@ -89,8 +90,9 @@ struct ServiceInfo {
     clusters: Vec<orion_lib::PartialClusterType>,
     ads_cluster_names: Vec<String>,
     access_log_config: Option<AccessLogConfig>,
+    #[cfg(feature = "tracing")]
     tracing: HashMap<TracingKey, TracingConfig>,
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     metrics: Vec<Metrics>,
 }
 
@@ -108,11 +110,12 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
     // launch services runtime...
     //
 
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     let metrics = VecMetrics::from(&bootstrap).0;
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     let are_metrics_empty = metrics.is_empty();
 
+    #[cfg(feature = "tracing")]
     let tracing = bootstrap
         .static_resources
         .listeners
@@ -150,8 +153,9 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         clusters,
         ads_cluster_names,
         access_log_config,
+        #[cfg(feature = "tracing")]
         tracing,
-        #[cfg (feature = "metrics")]
+        #[cfg(feature = "metrics")]
         metrics: metrics.clone(),
     };
 
@@ -162,7 +166,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         service_info,
     )?;
 
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     if !are_metrics_empty {
         info!("Waiting for metrics setup to complete...");
         wait_for_metrics_setup();
@@ -177,7 +181,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
     info!("using {} runtimes with {num_threads_per_runtime} threads each", rt_config.num_runtimes());
 
     // initialize global metrics...
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     init_global_metrics(&metrics, num_threads_per_runtime * num_runtimes);
 
     info!("Launching with {} cpus, {} runtimes", num_cpus, num_runtimes);
@@ -191,7 +195,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
                     num_threads_per_runtime,
                     rt_config.affinity_strategy.clone().map(|affinity| (RuntimeId(id), affinity)),
                     config_receivers,
-                    #[cfg (feature = "metrics")]
+                    #[cfg(feature = "metrics")]
                     metrics.clone(),
                 )
             })
@@ -215,13 +219,11 @@ fn spawn_proxy_runtime_from_thread(
     num_threads: usize,
     affinity_info: Option<(RuntimeId, Affinity)>,
     configuration_receivers: ConfigurationReceivers,
-    #[cfg(feature = "metrics")]
-    metrics: Vec<Metrics>,
+    #[cfg(feature = "metrics")] metrics: Vec<Metrics>,
 ) -> Result<RuntimeHandle> {
     let thread_name = build_thread_name(thread_name, affinity_info.as_ref());
 
     let handle: JoinHandle<Result<()>> = thread::Builder::new().name(thread_name.clone()).spawn(move || {
-
         #[cfg(feature = "metrics")]
         let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, metrics);
         #[cfg(not(feature = "metrics"))]
@@ -252,10 +254,9 @@ fn spawn_services_runtime_from_thread(
     let thread_name = build_thread_name(thread_name, affinity_info.as_ref());
 
     let rt_handle = thread::Builder::new().name(thread_name.clone()).spawn(move || {
-
-        #[cfg (feature = "metrics")]
+        #[cfg(feature = "metrics")]
         let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info, vec![]);
-        #[cfg (not(feature = "metrics"))]
+        #[cfg(not(feature = "metrics"))]
         let rt = runtime::build_tokio_runtime(&thread_name, num_threads, affinity_info);
 
         rt.block_on(async {
@@ -295,8 +296,9 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
         clusters,
         ads_cluster_names,
         access_log_config,
+        #[cfg(feature = "tracing")]
         tracing,
-        #[cfg (feature = "metrics")]
+        #[cfg(feature = "metrics")]
         metrics,
     } = info;
     let mut set: JoinSet<Result<()>> = JoinSet::new();
@@ -346,7 +348,7 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
     }
 
     // spawn metrics exporter...
-    #[cfg (feature = "metrics")]
+    #[cfg(feature = "metrics")]
     if metrics.is_empty() {
         info!("OTEL metrics: stats_sink not configured (skipped)");
     } else {

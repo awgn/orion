@@ -34,11 +34,9 @@ use orion_interner::StringInterner;
 #[cfg(feature = "metrics")]
 use opentelemetry::KeyValue;
 
+use crate::{with_histogram, with_metric};
 #[cfg(feature = "metrics")]
-use orion_metrics::{
-    metrics::{http, listeners},
-};
-use crate::{with_metric, with_histogram};
+use orion_metrics::metrics::{http, listeners};
 
 use rustls::ServerConfig;
 use scopeguard::defer;

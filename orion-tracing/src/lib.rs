@@ -14,14 +14,12 @@
 // limitations under the License.
 //
 
-pub mod attributes;
 pub mod http_tracer;
 pub mod request_id;
 pub mod span_state;
 pub mod trace_context;
 pub mod trace_info;
 
-#[cfg(feature = "tracing")]
 use {
     opentelemetry::trace::TracerProvider,
     opentelemetry::KeyValue,
@@ -41,7 +39,6 @@ use parking_lot::Mutex;
 use smol_str::SmolStr;
 use std::result::Result as StdResult;
 use thiserror::Error;
-#[cfg(feature = "tracing")]
 use {orion_error::Result, smol_str::ToSmolStr};
 
 #[allow(dead_code)]
@@ -68,7 +65,6 @@ struct GlobalTracers {
     tracers: ArcSwap<TracerMap>,
 }
 
-#[cfg(feature = "tracing")]
 static GLOBAL_TRACERS: LazyLock<GlobalTracers> =
     LazyLock::new(|| GlobalTracers { write_lock: Mutex::new(()), tracers: ArcSwap::new(Arc::new(HashMap::new())) });
 
@@ -101,7 +97,6 @@ impl TryFrom<&TracingConfig> for OtelConfig {
     }
 }
 
-#[cfg(feature = "tracing")]
 pub fn otel_remove_tracers_by_listeners(listeners: &[SmolStr]) -> Result<()> {
     if !listeners.is_empty() {
         info!("OTEL Tracers: removing listeners configuration...");
@@ -116,7 +111,6 @@ pub fn otel_remove_tracers_by_listeners(listeners: &[SmolStr]) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "tracing")]
 pub fn otel_update_tracers(tracers: HashMap<TracingKey, TracingConfig>) -> Result<()> {
     info!("OTEL Tracers: update listeners configuration...");
     let _lock = GLOBAL_TRACERS.write_lock.lock();
@@ -140,19 +134,11 @@ pub fn otel_update_tracers(tracers: HashMap<TracingKey, TracingConfig>) -> Resul
 /// Retrieves a tracer by name from the global TRACERS registry.
 ///
 /// Returns an Arc reference to the BoxedTracer if found, None otherwise.
-#[cfg(feature = "tracing")]
 pub fn get_otel_tracer(key: &TracingKey) -> Option<Arc<BoxedTracer>> {
     let tracers_guard = GLOBAL_TRACERS.tracers.load();
     tracers_guard.get(key).cloned()
 }
 
-#[cfg(not(feature = "tracing"))]
-#[inline]
-pub fn get_otel_tracer(_key: &TracingKey) -> Option<Arc<BoxedTracer>> {
-    None
-}
-
-#[cfg(feature = "tracing")]
 fn insert_tracer(
     key: TracingKey,
     config: &TracingConfig,

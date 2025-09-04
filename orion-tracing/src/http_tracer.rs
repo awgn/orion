@@ -16,18 +16,15 @@
 
 use bounded_integer::BoundedU16;
 use http::header::HOST;
-use http::{HeaderValue, Request};
+use http::Request;
 use opentelemetry::global::BoxedSpan;
 
-use opentelemetry::trace::{Span, SpanContext, TraceContextExt, TraceState, Tracer};
-use opentelemetry::KeyValue;
+use opentelemetry::trace::{SpanContext, TraceContextExt, TraceState, Tracer};
 use opentelemetry::{Context, SpanId, TraceFlags, TraceId};
 use rand::Rng;
 
-use crate::attributes::*;
 use orion_configuration::config::network_filters::tracing::{TracingConfig, TracingKey};
 use orion_http_header::*;
-use orion_interner::StringInterner;
 
 use crate::trace_context::TraceContext;
 use crate::{
@@ -227,33 +224,6 @@ impl HttpTracer {
 
         // Wrap it in a Arc/Mutex for safe mutation and for shared ownership.
         Some(span)
-    }
-
-    pub fn set_attributes_from_request<B>(&self, span: &mut BoxedSpan, request: &Request<B>) {
-        // Add few attributes, based on the request
-        span.set_attributes([
-            KeyValue::new(HTTP_REQUEST_METHOD, request.method().as_str().to_static_str()), // the number of HTTP methods is small, hence we can use the string interner here..
-            KeyValue::new(URL_FULL, request.uri().to_string()),
-            KeyValue::new(URL_PATH, request.uri().path().to_string()),
-            KeyValue::new(NETWORK_PROTOCOL_NAME, "http"),
-            KeyValue::new(
-                NETWORK_PROTOCOL_VERSION,
-                request.version().to_static_str().split_once('/').map(|(_, ver)| ver).unwrap_or("unknow"),
-            ),
-            KeyValue::new(
-                USER_AGENT_ORIGINAL,
-                request
-                    .headers()
-                    .get(::http::header::USER_AGENT)
-                    .unwrap_or(&HeaderValue::from_static("unknown"))
-                    .to_str()
-                    .unwrap_or("invalid-user-agent")
-                    .to_string(),
-            ),
-        ]);
-
-        request.uri().query().inspect(|q| span.set_attribute(KeyValue::new(URL_QUERY, q.to_string())));
-        request.uri().scheme().inspect(|s| span.set_attribute(KeyValue::new(URL_SCHEME, s.as_str().to_static_str())));
     }
 }
 

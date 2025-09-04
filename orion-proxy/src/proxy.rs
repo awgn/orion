@@ -25,28 +25,34 @@ use futures::future::join_all;
 use orion_configuration::config::{bootstrap::Node, log::AccessLogConfig, runtime::Affinity, Bootstrap};
 
 #[cfg(feature = "tracing")]
-use orion_configuration::config::network_filters::tracing::{TracingConfig, TracingKey};
+use {
+    orion_configuration::config::network_filters::tracing::{TracingConfig, TracingKey},
+    std::collections::HashMap,
+};
+
+use tokio::{sync::mpsc::Sender, task::JoinSet};
+
+#[cfg(feature = "access-log")]
+use {
+    orion_lib::access_log::{start_access_loggers, update_configuration, Target},
+    smol_str::ToSmolStr,
+};
 
 use orion_error::Context;
 use orion_lib::{
-    access_log::{start_access_loggers, update_configuration, Target},
-    clusters::cluster::ClusterType,
-    get_listeners_and_clusters, new_configuration_channel, runtime_config, ConfigurationReceivers,
-    ConfigurationSenders, ListenerConfigurationChange, PartialClusterType, Result, SecretManager,
+    clusters::cluster::ClusterType, get_listeners_and_clusters, new_configuration_channel, runtime_config,
+    ConfigurationReceivers, ConfigurationSenders, ListenerConfigurationChange, PartialClusterType, Result,
+    SecretManager,
 };
 #[cfg(feature = "metrics")]
 use orion_metrics::{metrics::init_global_metrics, wait_for_metrics_setup, Metrics, VecMetrics};
+
 use parking_lot::RwLock;
-use smol_str::ToSmolStr;
 use std::{
     sync::Arc,
     thread::{self, JoinHandle},
 };
 
-#[cfg(feature = "tracing")]
-use std::collections::HashMap;
-
-use tokio::{sync::mpsc::Sender, task::JoinSet};
 use tracing::{debug, info, warn};
 
 pub fn run_orion(bootstrap: Bootstrap, access_log_config: Option<AccessLogConfig>) {
@@ -90,6 +96,7 @@ struct ServiceInfo {
     listener_factories: Vec<orion_lib::ListenerFactory>,
     clusters: Vec<orion_lib::PartialClusterType>,
     ads_cluster_names: Vec<String>,
+    #[cfg(feature = "access-log")]
     access_log_config: Option<AccessLogConfig>,
     #[cfg(feature = "tracing")]
     tracing: HashMap<TracingKey, TracingConfig>,
@@ -99,7 +106,7 @@ struct ServiceInfo {
 
 type SenderGuards = Vec<ConfigurationSenders>;
 
-fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConfig>) -> Result<SenderGuards> {
+fn launch_runtimes(bootstrap: Bootstrap, _access_log_config: Option<AccessLogConfig>) -> Result<SenderGuards> {
     let rt_config = runtime_config();
     let num_runtimes = rt_config.num_runtimes();
     let num_cpus = rt_config.num_cpus();
@@ -152,6 +159,7 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         return Err("No listeners and no ads clusters configured".into());
     }
 
+    #[allow(clippy::used_underscore_binding)]
     let service_info = ServiceInfo {
         node,
         configuration_senders: config_senders,
@@ -160,7 +168,8 @@ fn launch_runtimes(bootstrap: Bootstrap, access_log_config: Option<AccessLogConf
         bootstrap,
         clusters,
         ads_cluster_names,
-        access_log_config,
+        #[cfg(feature = "access-log")]
+        access_log_config: _access_log_config,
         #[cfg(feature = "tracing")]
         tracing,
         #[cfg(feature = "metrics")]
@@ -303,6 +312,7 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
         listener_factories,
         clusters,
         ads_cluster_names,
+        #[cfg(feature = "access-log")]
         access_log_config,
         #[cfg(feature = "tracing")]
         tracing,
@@ -331,6 +341,7 @@ async fn spawn_services(info: ServiceInfo) -> Result<()> {
     });
 
     // spawn access loggers service...
+    #[cfg(feature = "access-log")]
     if let Some(conf) = access_log_config {
         let listeners = bootstrap.static_resources.listeners.clone();
         set.spawn(async move {

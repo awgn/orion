@@ -47,7 +47,7 @@ use {
     opentelemetry::trace::Span, opentelemetry::trace::Status,
 };
 
-use crate::{with_client_span, with_server_span};
+use crate::{access_log::ShareableAccessLogPermit, with_client_span, with_server_span};
 use smol_str::{SmolStr, ToSmolStr};
 
 use orion_configuration::config::network_filters::http_connection_manager::http_filters::{
@@ -65,9 +65,10 @@ use orion_configuration::config::network_filters::{
         RdsSpecifier, RouteSpecifier, UpgradeType,
     },
 };
-use orion_format::context::{
-    DownstreamResponse, FinishContext, HttpRequestDuration, HttpResponseDuration, InitHttpContext,
-};
+use orion_format::context::{DownstreamResponse, HttpRequestDuration, HttpResponseDuration, InitHttpContext};
+
+#[cfg(feature = "access-log")]
+use orion_format::context::FinishContext;
 
 use crate::with_metric;
 use orion_format::LogFormatterLocal;
@@ -82,17 +83,15 @@ use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::thread::ThreadId;
 use std::time::Instant;
 use std::{fmt, future::Future, result::Result as StdResult, sync::Arc};
-use tokio::sync::mpsc::Permit;
 use tokio::sync::watch;
 use tracing::debug;
 use upgrades as upgrade_utils;
 
-use crate::{
-    access_log::{is_access_log_enabled, log_access, log_access_reserve_balanced, AccessLogMessage, Target},
-    body::{
-        body_with_metrics::BodyWithMetrics,
-        response_flags::{BodyKind, ResponseFlags},
-    },
+#[cfg(feature = "access-log")]
+use crate::access_log::{is_access_log_enabled, log_access, log_access_reserve_balanced, Target};
+use crate::body::{
+    body_with_metrics::BodyWithMetrics,
+    response_flags::{BodyKind, ResponseFlags},
 };
 
 use crate::{
@@ -434,6 +433,7 @@ pub struct AccessLoggersContext {
 }
 
 impl AccessLoggersContext {
+    #[allow(dead_code)]
     pub fn new(access_log: &[AccessLog]) -> Self {
         AccessLoggersContext {
             access_loggers: Mutex::new(access_log.iter().map(|al| al.logger.local_clone()).collect::<Vec<_>>()),
@@ -468,16 +468,22 @@ impl Default for TransactionHandler {
 }
 
 impl TransactionHandler {
+    #[allow(clippy::used_underscore_binding)]
     pub fn new(
-        access_log: &[AccessLog],
+        _access_log: &[AccessLog],
         trace_ctx: Option<TraceContext>,
         request_id: RequestId,
         server_span: Option<BoxedSpan>,
         thread_id: ThreadId,
     ) -> Self {
+        #[cfg(feature = "access-log")]
+        let access_log_ctx = is_access_log_enabled().then(|| AccessLoggersContext::new(_access_log));
+        #[cfg(not(feature = "access-log"))]
+        let access_log_ctx = None;
+
         TransactionHandler {
             start_instant: std::time::Instant::now(),
-            access_log_ctx: is_access_log_enabled().then(|| AccessLoggersContext::new(access_log)),
+            access_log_ctx,
             trace_ctx,
             request_id,
             completed_phases: AtomicU8::new(0),
@@ -496,7 +502,7 @@ impl TransactionHandler {
         self: Arc<Self>,
         route_conf: RC,
         manager: Arc<HttpConnectionManager>,
-        permit: Arc<Mutex<Option<Permit<'static, AccessLogMessage>>>>,
+        permit: Option<ShareableAccessLogPermit>,
         mut request: Request<BodyWithMetrics<BodyWithTimeout<Incoming>>>,
         downstream_metadata: Arc<DownstreamConnectionMetadata>,
     ) -> Result<Response<BodyWithMetrics<PolyBody>>>
@@ -902,7 +908,18 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             let ExtendedRequest { request, downstream_metadata } = req;
             let (parts, body) = request.into_parts();
             let request = Request::from_parts(parts, BodyWithTimeout::new(req_timeout, body));
-            let permit = log_access_reserve_balanced().await;
+            let permit = {
+                #[cfg(feature = "access-log")]
+                if is_access_log_enabled() {
+                    Some(log_access_reserve_balanced().await)
+                } else {
+                    None
+                }
+                #[cfg(not(feature = "access-log"))]
+                None
+            };
+
+            let permit_clone = permit.as_ref().map(Arc::clone);
 
             // optionally apply a timeout to the body.
             // envoy says this timeout is started when the request is initiated. This is relatively vague, but because at this point we will
@@ -919,7 +936,6 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             //
             // 2. create the MetricsBody, which will track the size of the request body
 
-            let permit_clone = Arc::clone(&permit);
             let init_flags = request.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
             let _req_head_size = request_head_size(&request);
@@ -1065,24 +1081,26 @@ fn eval_http_init_context<R>(request: &Request<R>, trans_handler: &TransactionHa
 }
 
 fn eval_http_finish_context(
-    access_loggers: &mut Vec<LogFormatterLocal>,
-    trans_start_time: Instant,
-    bytes_received: u64,
-    bytes_sent: u64,
-    listener_name: &'static str,
-    flags: ResponseFlags,
-    permit: Arc<Mutex<Option<Permit<'static, AccessLogMessage>>>>,
+    _access_loggers: &mut Vec<LogFormatterLocal>,
+    _trans_start_time: Instant,
+    _bytes_received: u64,
+    _bytes_sent: u64,
+    _listener_name: &'static str,
+    _flags: ResponseFlags,
+    _permit: Option<ShareableAccessLogPermit>,
 ) {
-    access_loggers.with_context(&FinishContext {
-        duration: trans_start_time.elapsed(),
-        bytes_received,
-        bytes_sent,
-        response_flags: flags.0,
-    });
-
-    let loggers: Vec<LogFormatterLocal> = std::mem::take(access_loggers);
-    let messages = loggers.into_iter().map(LogFormatterLocal::into_message).collect::<Vec<_>>();
-    log_access(permit, Target::Listener(listener_name.to_smolstr()), messages);
+    #[cfg(feature = "access-log")]
+    if let Some(permit) = _permit {
+        _access_loggers.with_context(&FinishContext {
+            duration: _trans_start_time.elapsed(),
+            bytes_received: _bytes_received,
+            bytes_sent: _bytes_sent,
+            response_flags: _flags.0,
+        });
+        let loggers: Vec<LogFormatterLocal> = std::mem::take(_access_loggers);
+        let messages = loggers.into_iter().map(LogFormatterLocal::into_message).collect::<Vec<_>>();
+        log_access(permit, Target::Listener(_listener_name.to_smolstr()), messages);
+    }
 }
 
 fn apply_authorization_rules<B>(rbac: &HttpRbac, req: &Request<B>) -> FilterDecision {

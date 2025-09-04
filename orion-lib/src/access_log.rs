@@ -77,7 +77,8 @@ pub enum LoggerError {
 
 static SENDER_POOL: OnceCell<LoggerPool<AccessLogMessage>> = OnceCell::new();
 
-type AccessLogToken = Permit<'static, AccessLogMessage>;
+pub type AccessLogPermit = Permit<'static, AccessLogMessage>;
+pub type ShareableAccessLogPermit = Arc<Mutex<Option<AccessLogPermit>>>;
 
 /// Asynchronously reserves a permit to send an `AccessLogMessage`, if possible.
 ///
@@ -86,7 +87,7 @@ type AccessLogToken = Permit<'static, AccessLogMessage>;
 /// consumed later by one of them to log message.
 ///
 #[inline]
-pub async fn log_access_reserve_balanced() -> Arc<Mutex<Option<AccessLogToken>>> {
+pub async fn log_access_reserve_balanced() -> ShareableAccessLogPermit {
     let maybe_permit = if let Some(sender) = get_sender() { sender.reserve().await.ok() } else { None };
     Arc::new(Mutex::new(maybe_permit))
 }
@@ -97,7 +98,7 @@ pub async fn log_access_reserve_balanced() -> Arc<Mutex<Option<AccessLogToken>>>
 /// or `None` if the sender is unavailable or the reservation fails. The permit can be shared across tasks
 /// and consumed later by one of them to log a message.
 #[inline]
-pub async fn log_access_reserve_single() -> Arc<Mutex<Option<AccessLogToken>>> {
+pub async fn log_access_reserve_single() -> ShareableAccessLogPermit {
     let maybe_permit = if let Some(sender) = get_sender_at(0) { sender.reserve().await.ok() } else { None };
     Arc::new(Mutex::new(maybe_permit))
 }
@@ -108,7 +109,7 @@ pub async fn log_access_reserve_single() -> Arc<Mutex<Option<AccessLogToken>>> {
 /// containing the specified `target` and formatted messages.
 #[allow(clippy::needless_pass_by_value)]
 #[inline]
-pub fn log_access(permit: Arc<Mutex<Option<AccessLogToken>>>, target: Target, vec: Vec<FormattedMessage>) {
+pub fn log_access(permit: ShareableAccessLogPermit, target: Target, vec: Vec<FormattedMessage>) {
     if let Some(permit) = permit.lock().take() {
         permit.send(AccessLogMessage::Message(target, vec));
     }
@@ -262,9 +263,12 @@ mod tests {
         .await
         .unwrap();
 
-        let permit = log_access_reserve_single().await;
-        // log the formatted message to file and stdout...
-        log_access(permit, Target::Listener("test".into()), vec![message.clone(), message.clone()]);
+        let permit = if is_access_log_enabled() { Some(log_access_reserve_single().await) } else { None };
+
+        if let Some(permit) = permit {
+            // log the formatted message to file and stdout...
+            log_access(permit, Target::Listener("test".into()), vec![message.clone(), message.clone()]);
+        }
 
         _ = timeout(Duration::from_secs(2), handles.join_all()).await;
     }

@@ -250,6 +250,7 @@ pub fn get_host_from_request<B>(request: &Request<B>) -> Option<&str> {
 mod tests {
     use super::*;
     use bounded_integer::BoundedU16;
+    use http::HeaderValue;
 
     #[test]
     fn build_no_tracer() {

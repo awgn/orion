@@ -15,8 +15,15 @@
 //
 //
 
+#[cfg(feature = "access-log")]
+use {
+    crate::access_log::is_access_log_enabled,
+    crate::access_log::{log_access, log_access_reserve_balanced, Target},
+    orion_format::LogFormatterLocal,
+    smol_str::ToSmolStr,
+};
+
 use crate::{
-    access_log::{log_access, log_access_reserve_balanced, Target},
     clusters::clusters_manager::{self, RoutingContext},
     listeners::{access_log::AccessLogContext, filter_state::DownstreamConnectionMetadata},
     transport::connector::TcpErrorContext,
@@ -29,9 +36,8 @@ use orion_configuration::config::{
 use orion_format::{
     context::{FinishContext, InitContext, TcpContext},
     types::ResponseFlags,
-    LogFormatterLocal,
 };
-use smol_str::ToSmolStr;
+
 use std::{fmt, net::SocketAddr, sync::Arc, time::Instant};
 use tracing::{debug, error};
 
@@ -173,9 +179,17 @@ impl TcpProxy {
             bytes_sent,
             response_flags,
         });
-        let permit = log_access_reserve_balanced().await;
-        let messages = access_loggers.into_iter().map(LogFormatterLocal::into_message).collect::<Vec<_>>();
-        log_access(permit, Target::Listener(self.listener_name.to_smolstr()), messages);
+
+        #[cfg(feature = "access-log")]
+        {
+            let permit = if is_access_log_enabled() { Some(log_access_reserve_balanced().await) } else { None };
+
+            if let Some(permit) = permit {
+                let messages = access_loggers.into_iter().map(LogFormatterLocal::into_message).collect::<Vec<_>>();
+                log_access(permit, Target::Listener(self.listener_name.to_smolstr()), messages);
+            }
+        }
+
         res
     }
 }

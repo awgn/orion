@@ -83,6 +83,7 @@ aws_lc_rs = ["rustls/aws_lc_rs"]
 default   = ["aws_lc_rs"]
 metrics   = ["dep:orion-metrics"]
 tracing   = []
+access-log = []
 
 [lints]
 workspace = true

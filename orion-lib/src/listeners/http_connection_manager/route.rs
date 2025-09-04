@@ -30,9 +30,6 @@ use crate::{
     PolyBody, Result,
 };
 
-#[cfg(feature = "tracing")]
-use crate::tracing_attributes::set_attributes_from_request;
-
 use http::{uri::Parts as UriParts, Uri};
 use hyper::{body::Incoming, Request, Response};
 use orion_configuration::config::network_filters::http_connection_manager::{
@@ -44,8 +41,10 @@ use orion_format::{
     context::{UpstreamContext, UpstreamRequest},
     types::{ResponseFlagsLong, ResponseFlagsShort},
 };
+
 #[cfg(feature = "tracing")]
 use {
+    crate::tracing_attributes::set_attributes_from_request,
     crate::tracing_attributes::{UPSTREAM_ADDRESS, UPSTREAM_CLUSTER_NAME},
     opentelemetry::trace::Span,
     opentelemetry::KeyValue,

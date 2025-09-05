@@ -305,7 +305,7 @@ impl ProxyProtocolConfigurator {
             let updated_tls = TlsConfigurator::<ClientConfig, WantsToBuildClient>::update(
                 inner_tls_configurator.clone(),
                 secret_id,
-                secret,
+                &secret,
             )?;
             self.inner_tls_configurator = Some(updated_tls);
         }

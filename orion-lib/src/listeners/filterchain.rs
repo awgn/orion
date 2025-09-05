@@ -262,7 +262,6 @@ impl FilterchainType {
                     with_histogram!(tcp::DOWNSTREAM_CX_LENGTH_MS, record, _ms, &[KeyValue::new("listener", listener_name)]);
                 }
 
-                let tcp_proxy = tcp_proxy.clone();
                 let listener_name = tcp_proxy.listener_name;
                 let server_config = config
                     .tls_configurator

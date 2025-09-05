@@ -246,7 +246,7 @@ impl Listener {
                     match maybe_secret_update {
                         Ok(secret_update) => {
                             // todo: possibly expensive clone - may need to rethink this structure
-                            let mut filter_chains_clone = filter_chains.as_ref().clone();
+                            let mut filter_chains_clone = Arc::unwrap_or_clone(filter_chains);
                             Self::process_secret_update(name, &mut filter_chains_clone, secret_update);
                             filter_chains = Arc::new(filter_chains_clone);
                         }
@@ -471,7 +471,7 @@ impl Listener {
                         let maybe_configurator = TlsConfigurator::<ServerConfig, WantsToBuildServer>::update(
                             tls_configurator,
                             &secret_id,
-                            secret.clone(),
+                            &secret,
                         );
                         if let Ok(new_tls_configurator) = maybe_configurator {
                             filterchain.tls_configurator = Some(new_tls_configurator);

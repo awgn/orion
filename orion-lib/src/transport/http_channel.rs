@@ -335,7 +335,7 @@ impl<'a> RequestHandler<RequestExt<'a, Request<BodyWithMetrics<PolyBody>>>> for 
         let cluster_name = self.cluster_name;
         match &self.client {
             HttpChannelClient::Plain(sender) => {
-                let RequestContext { route_timeout, retry_policy } = request.ctx.clone();
+                let RequestContext { route_timeout, retry_policy } = request.ctx;
                 let client = sender.get_or_build();
                 let req = maybe_normalize_uri(request.req, false)?;
 
@@ -351,7 +351,7 @@ impl<'a> RequestHandler<RequestExt<'a, Request<BodyWithMetrics<PolyBody>>>> for 
             },
             HttpChannelClient::Tls(context) => {
                 let ClientContext { configured_upstream_http_version, client: sender } = context;
-                let RequestContext { route_timeout, retry_policy } = request.ctx.clone();
+                let RequestContext { route_timeout, retry_policy } = request.ctx;
                 let configured_version = *configured_upstream_http_version;
                 let client = sender.get_or_build();
 

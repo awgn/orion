@@ -155,7 +155,7 @@ impl ClusterOps for OriginalDstCluster {
     fn change_tls_context(&mut self, secret_id: &str, secret: TransportSecret) -> Result<()> {
         if let Some(tls_configurator) = self.http_config.tls_configurator.clone() {
             let tls_configurator =
-                TlsConfigurator::<ClientConfig, WantsToBuildClient>::update(tls_configurator, secret_id, secret)?;
+                TlsConfigurator::<ClientConfig, WantsToBuildClient>::update(tls_configurator, secret_id, &secret)?;
             self.http_config.tls_configurator = Some(tls_configurator);
         }
         Ok(())

@@ -203,7 +203,7 @@ pub struct TlsConfigurator<S: Clone, CtxType> {
 }
 
 impl TlsConfigurator<ClientConfig, WantsToBuildClient> {
-    pub fn update(self, secret_id: &str, secret: TransportSecret) -> Result<Self> {
+    pub fn update(self, secret_id: &str, secret: &TransportSecret) -> Result<Self> {
         let TlsContextBuilder { state } = self.context_builder;
         let WantsToBuildClient {
             supported_versions,
@@ -216,7 +216,7 @@ impl TlsConfigurator<ClientConfig, WantsToBuildClient> {
         let new_builder = match secret {
             TransportSecret::Certificate(certificate) => {
                 if Some(secret_id.to_owned()) == certificate_secret_id {
-                    let client_cert: ClientCert = (*certificate).clone().into();
+                    let client_cert: ClientCert = certificate.as_ref().to_owned().into();
                     TlsContextBuilder::with_supported_versions(supported_versions)
                         .with_client_certificate_store(validation_context_secret_id, certificate_store)
                         .with_client_certificate(certificate_secret_id, Arc::new(client_cert))
@@ -229,7 +229,7 @@ impl TlsConfigurator<ClientConfig, WantsToBuildClient> {
             },
             TransportSecret::ValidationContext(cert_store) => {
                 if Some(secret_id.to_owned()) == validation_context_secret_id {
-                    let cert_store = (*cert_store).clone().into();
+                    let cert_store = cert_store.as_ref().clone().into();
                     let builder = TlsContextBuilder::with_supported_versions(supported_versions)
                         .with_client_certificate_store(validation_context_secret_id, cert_store);
                     if let Some(client_certificate) = client_certificate {
@@ -252,7 +252,7 @@ impl TlsConfigurator<ClientConfig, WantsToBuildClient> {
 }
 
 impl TlsConfigurator<ServerConfig, WantsToBuildServer> {
-    pub fn update(self, secret_id: &str, secret: TransportSecret) -> Result<Self> {
+    pub fn update(self, secret_id: &str, secret: &TransportSecret) -> Result<Self> {
         let TlsContextBuilder { state } = self.context_builder;
         let WantsToBuildServer {
             supported_versions,
@@ -264,7 +264,7 @@ impl TlsConfigurator<ServerConfig, WantsToBuildServer> {
         let new_builder = match secret {
             TransportSecret::Certificate(certificate) => {
                 if let Some(secret) = server_ids_and_certificates.iter_mut().find(|s| s.name == secret_id) {
-                    let server_cert: ServerCert = (*certificate).clone().try_into()?;
+                    let server_cert: ServerCert = certificate.as_ref().to_owned().try_into()?;
                     secret.server_cert = server_cert;
 
                     let builder = TlsContextBuilder::with_supported_versions(supported_versions);
@@ -284,7 +284,7 @@ impl TlsConfigurator<ServerConfig, WantsToBuildServer> {
             },
             TransportSecret::ValidationContext(cert_store) => {
                 if Some(secret_id.to_owned()) == validation_context_secret_id {
-                    let cert_store = (*cert_store).clone().into();
+                    let cert_store = cert_store.as_ref().to_owned().into();
                     TlsContextBuilder::with_supported_versions(supported_versions)
                         .with_server_certificate_store(validation_context_secret_id, cert_store)
                         .with_certificates(server_ids_and_certificates)

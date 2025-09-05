@@ -84,9 +84,8 @@ impl RequestIdManager {
         Self { generate_request_id, preserve_external_request_id, always_set_request_id_in_response }
     }
 
-    pub fn apply_policy<B>(&self, req: Request<B>) -> (Request<B>, RequestId) {
-        let (mut parts, body) = req.into_parts();
-        let existing_id = parts.headers.get(X_REQUEST_ID).cloned();
+    pub fn apply_policy<B>(&self, mut req: Request<B>) -> (Request<B>, RequestId) {
+        let existing_id = req.headers().get(X_REQUEST_ID).cloned();
         let (authoritative_id, generated) = match existing_id.as_ref() {
             Some(id) if self.preserve_external_request_id => (id.clone(), false),
             _ => (Self::generate_new_id(), true),
@@ -99,10 +98,10 @@ impl RequestIdManager {
         // 3. Apply the changes to the rqeuest...
         if should_propagate_header {
             if generated {
-                parts.headers.insert(X_REQUEST_ID, authoritative_id.clone());
+                req.headers_mut().insert(X_REQUEST_ID, authoritative_id.clone());
             } // if not generated, we keep the existing ID
         } else if existing_id.is_some() {
-            parts.headers.remove(X_REQUEST_ID);
+            req.headers_mut().remove(X_REQUEST_ID);
         }
 
         // 4. Create the RequestId...
@@ -112,7 +111,7 @@ impl RequestIdManager {
             RequestId::Internal(authoritative_id)
         };
 
-        (Request::from_parts(parts, body), req_id)
+        (req, req_id)
     }
 
     #[inline]

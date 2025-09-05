@@ -47,7 +47,7 @@ impl UpstreamTransportSocketConfigurator {
         match self {
             UpstreamTransportSocketConfigurator::Tls(tls_conf) => {
                 let updated_tls =
-                    TlsConfigurator::<ClientConfig, WantsToBuildClient>::update(tls_conf.clone(), secret_id, secret)?;
+                    TlsConfigurator::<ClientConfig, WantsToBuildClient>::update(tls_conf.clone(), secret_id, &secret)?;
                 *tls_conf = updated_tls;
                 Ok(())
             },

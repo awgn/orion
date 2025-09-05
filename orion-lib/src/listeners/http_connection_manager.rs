@@ -532,6 +532,7 @@ impl TransactionHandler {
     }
 
     #[allow(clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn handle_transaction<RC>(
         self: Arc<Self>,
         route_conf: RC,
@@ -888,7 +889,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
         let trace_context = self
             .manager
             .http_tracer
-            .try_build_trace_context(&updated_request, incoming_request_id.or(Some(request_id.clone())));
+            .try_build_trace_context(&updated_request, incoming_request_id.as_ref().or(Some(&request_id)));
 
         #[cfg(feature = "tracing")]
         let mut server_span = self.manager.http_tracer.try_create_span(
@@ -1116,9 +1117,8 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                 return Ok(response);
             };
 
-            let response = trans_handler
-                .clone()
-                .handle_transaction(route_conf, manager, request, downstream_metadata,
+            let response = Arc::clone(&trans_handler).
+                handle_transaction(route_conf, manager, request, downstream_metadata,
                     #[cfg (feature = "access-log")]
                     permit)
                 .await;

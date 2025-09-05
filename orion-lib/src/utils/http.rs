@@ -17,6 +17,7 @@
 
 use http::{Request, Response, Version};
 
+#[allow(dead_code)]
 pub fn request_head_size<T>(req: &Request<T>) -> usize {
     let version_len = http_version_len(req.version());
     let mut size = req.method().as_str().len()                // (es. "GET")
@@ -32,6 +33,7 @@ pub fn request_head_size<T>(req: &Request<T>) -> usize {
     size
 }
 
+#[allow(dead_code)]
 pub fn request_headers_size<T>(req: &Request<T>) -> usize {
     let mut size = 0;
     for (name, value) in req.headers() {
@@ -43,6 +45,7 @@ pub fn request_headers_size<T>(req: &Request<T>) -> usize {
     size
 }
 
+#[allow(dead_code)]
 pub fn response_head_size<T>(res: &Response<T>) -> usize {
     let version_len = http_version_len(res.version());
     let status_code_len = 3;
@@ -59,6 +62,7 @@ pub fn response_head_size<T>(res: &Response<T>) -> usize {
     size
 }
 
+#[allow(dead_code)]
 pub fn response_headers_size<T>(res: &Response<T>) -> usize {
     let mut size = 0;
     for (name, value) in res.headers() {
@@ -71,6 +75,7 @@ pub fn response_headers_size<T>(res: &Response<T>) -> usize {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn http_version_len(version: Version) -> usize {
     match version {
         Version::HTTP_11 | Version::HTTP_10 | Version::HTTP_09 => 8, // "HTTP/1.1"

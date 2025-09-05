@@ -23,7 +23,7 @@ use crate::{
         retry_policy::{EventError, TryInferFrom},
     },
     listeners::{
-        access_log::AccessLogContext, http_connection_manager::HttpConnectionManager,
+        http_connection_manager::HttpConnectionManager,
         synthetic_http_response::SyntheticHttpResponse,
     },
     transport::policy::{RequestContext, RequestExt},
@@ -37,8 +37,15 @@ use orion_configuration::config::network_filters::http_connection_manager::{
     RetryPolicy,
 };
 use orion_error::Context;
-use orion_format::{
+
+#[cfg(feature = "access-log")]
+use {
+    crate::listeners::access_log::AccessLogContext,
+    orion_format::
     context::{UpstreamContext, UpstreamRequest},
+};
+
+use orion_format::{
     types::{ResponseFlagsLong, ResponseFlagsShort},
 };
 
@@ -86,6 +93,7 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
 
         match maybe_channel {
             Ok(svc_channel) => {
+                #[cfg (feature = "access-log")]
                 if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
                     ctx.access_loggers.lock().with_context(&UpstreamContext {
                         authority: &svc_channel.upstream_authority,
@@ -143,6 +151,7 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
                     *span_state.client_span.lock() = client_span;
                 }
 
+                #[cfg(feature = "access-log")]
                 if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
                     ctx.access_loggers.lock().with_context(&UpstreamRequest(&upstream_request));
                 }

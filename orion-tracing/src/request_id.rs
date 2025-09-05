@@ -88,7 +88,10 @@ impl RequestIdManager {
         let existing_id = req.headers().get(X_REQUEST_ID).cloned();
         let (authoritative_id, generated) = match existing_id.as_ref() {
             Some(id) if self.preserve_external_request_id => (id.clone(), false),
+            #[cfg(any(feature = "access-log", feature = "tracing"))]
             _ => (Self::generate_new_id(), true),
+            #[cfg(not(any(feature = "access-log", feature = "tracing")))]
+            _ => (HeaderValue::from_static(""), true),
         };
 
         // 2. Determine if the ID must be propagated...

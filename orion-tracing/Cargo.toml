@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 tracing = []
+access-log = []
 
 [dependencies]
 orion-http-header.workspace = true

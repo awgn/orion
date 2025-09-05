@@ -51,7 +51,7 @@ dhat-heap   = ["dep:dhat"]
 jemalloc    = ["dep:tikv-jemallocator", "orion-metrics/jemalloc"]
 metrics     = ["dep:orion-metrics", "orion-lib/metrics"]
 tracing     = ["orion-lib/tracing"]
-access-log  = ["orion-lib/access-log"]
+access-log  = ["orion-lib/access-log", "orion-tracing/access-log"]
 prometheus  = ["metrics"]
 
 

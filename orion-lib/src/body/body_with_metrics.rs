@@ -27,13 +27,13 @@ use crate::body::response_flags::{BodyKind, ResponseFlags};
 mod metrics_enabled {
     #[allow(clippy::wildcard_imports)]
     use super::*;
+    use bytes::Buf;
+    use parking_lot::Mutex;
+    use pin_project::pin_project;
     use std::sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     };
-    use parking_lot::Mutex;
-    use bytes::Buf;
-    use pin_project::pin_project;
 
     type MetricsClosure = Box<dyn FnOnce(u64, ResponseFlags) + Send + 'static>;
 
@@ -173,7 +173,10 @@ mod metrics_disabled {
         type Error = B::Error;
 
         #[inline]
-        fn poll_frame(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        fn poll_frame(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
             self.project().inner.poll_frame(cx)
         }
 

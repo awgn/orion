@@ -91,7 +91,9 @@ impl HttpTracer {
         let forced = headers.contains_key(X_ENVOY_FORCE_TRACE);
 
         let dont_trace = || {
-            TraceContext::new(None).with_client_trace_id(x_client_trace_id.cloned()).with_request_id(request_id.cloned())
+            TraceContext::new(None)
+                .with_client_trace_id(x_client_trace_id.cloned())
+                .with_request_id(request_id.cloned())
         };
 
         // 1. trigger: x_client_trace_id...

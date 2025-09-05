@@ -22,10 +22,7 @@ use crate::{
         clusters_manager::{self, RoutingContext},
         retry_policy::{EventError, TryInferFrom},
     },
-    listeners::{
-        http_connection_manager::HttpConnectionManager,
-        synthetic_http_response::SyntheticHttpResponse,
-    },
+    listeners::{http_connection_manager::HttpConnectionManager, synthetic_http_response::SyntheticHttpResponse},
     transport::policy::{RequestContext, RequestExt},
     PolyBody, Result,
 };
@@ -41,13 +38,10 @@ use orion_error::Context;
 #[cfg(feature = "access-log")]
 use {
     crate::listeners::access_log::AccessLogContext,
-    orion_format::
-    context::{UpstreamContext, UpstreamRequest},
+    orion_format::context::{UpstreamContext, UpstreamRequest},
 };
 
-use orion_format::{
-    types::{ResponseFlagsLong, ResponseFlagsShort},
-};
+use orion_format::types::{ResponseFlagsLong, ResponseFlagsShort};
 
 #[cfg(feature = "tracing")]
 use {
@@ -93,7 +87,7 @@ impl<'a> RequestHandler<(MatchedRequest<'a>, &HttpConnectionManager)> for &Route
 
         match maybe_channel {
             Ok(svc_channel) => {
-                #[cfg (feature = "access-log")]
+                #[cfg(feature = "access-log")]
                 if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
                     ctx.access_loggers.lock().with_context(&UpstreamContext {
                         authority: &svc_channel.upstream_authority,

@@ -37,8 +37,8 @@ use hyper::{body::Incoming, service::Service, Request, Response};
 
 use orion_configuration::config::GenericError;
 
-#[cfg (feature = "access-log")]
-use crate::{access_log::ShareableAccessLogPermit};
+#[cfg(feature = "access-log")]
+use crate::access_log::ShareableAccessLogPermit;
 
 #[cfg(any(feature = "tracing", feature = "metrics"))]
 use opentelemetry::KeyValue;
@@ -46,8 +46,7 @@ use opentelemetry::KeyValue;
 #[cfg(feature = "tracing")]
 use {
     crate::tracing_attributes::set_attributes_from_request, crate::tracing_attributes::HTTP_RESPONSE_STATUS_CODE,
-    opentelemetry::trace::Span, opentelemetry::trace::Status,
-    opentelemetry::global::BoxedSpan,
+    opentelemetry::global::BoxedSpan, opentelemetry::trace::Span, opentelemetry::trace::Status,
 };
 
 use crate::{with_client_span, with_server_span};
@@ -69,20 +68,16 @@ use orion_configuration::config::network_filters::{
     },
 };
 
-
-
 #[cfg(feature = "access-log")]
 use orion_format::context::{
-    DownstreamResponse, HttpRequestDuration, HttpResponseDuration, InitHttpContext, FinishContext
+    DownstreamResponse, FinishContext, HttpRequestDuration, HttpResponseDuration, InitHttpContext,
 };
 
 use orion_format::LogFormatterLocal;
 
 use crate::with_metric;
 #[cfg(feature = "metrics")]
-use {
-    orion_metrics::metrics::http
-};
+use orion_metrics::metrics::http;
 
 use parking_lot::Mutex;
 use route::MatchedRequest;
@@ -100,21 +95,16 @@ use std::sync::atomic::Ordering;
 
 #[cfg(feature = "access-log")]
 use {
-    std::time::Instant,
     crate::access_log::{is_access_log_enabled, log_access, log_access_reserve_balanced, Target},
+    crate::body::response_flags::ResponseFlags,
     crate::listeners::access_log::AccessLogContext,
-    crate::body::response_flags::{ResponseFlags},
+    std::time::Instant,
 };
 
-use crate::body::{
-    body_with_metrics::BodyWithMetrics,
-    response_flags::BodyKind,
-};
+use crate::body::{body_with_metrics::BodyWithMetrics, response_flags::BodyKind};
 
 #[cfg(any(feature = "access-log", feature = "metrics"))]
-use crate:: {
-    utils::http::{request_head_size, response_head_size},
-};
+use crate::utils::http::{request_head_size, response_head_size};
 
 use crate::{
     body::body_with_timeout::BodyWithTimeout,
@@ -127,9 +117,9 @@ use crate::{
 
 #[cfg(feature = "tracing")]
 use orion_tracing::{
+    http_tracer::{SpanKind, SpanName},
     span_state::SpanState,
     trace_context::TraceContext,
-    http_tracer::{SpanKind, SpanName}
 };
 
 use orion_tracing::{
@@ -501,12 +491,9 @@ impl TransactionHandler {
     pub fn new(
         request_id: RequestId,
         thread_id: ThreadId,
-        #[cfg(feature = "access-log")]
-        access_log: &[AccessLog],
-        #[cfg(feature = "tracing")]
-        trace_ctx: Option<TraceContext>,
-        #[cfg(feature = "tracing")]
-        server_span: Option<BoxedSpan>,
+        #[cfg(feature = "access-log")] access_log: &[AccessLog],
+        #[cfg(feature = "tracing")] trace_ctx: Option<TraceContext>,
+        #[cfg(feature = "tracing")] server_span: Option<BoxedSpan>,
     ) -> Self {
         #[cfg(feature = "access-log")]
         let access_log_ctx = is_access_log_enabled().then(|| AccessLoggersContext::new(access_log));
@@ -539,8 +526,7 @@ impl TransactionHandler {
         manager: Arc<HttpConnectionManager>,
         mut request: Request<BodyWithMetrics<BodyWithTimeout<Incoming>>>,
         downstream_metadata: Arc<DownstreamConnectionMetadata>,
-        #[cfg (feature = "access-log")]
-        permit: Option<ShareableAccessLogPermit>,
+        #[cfg(feature = "access-log")] permit: Option<ShareableAccessLogPermit>,
     ) -> Result<Response<BodyWithMetrics<PolyBody>>>
     where
         RC: RequestHandler<(
@@ -561,28 +547,28 @@ impl TransactionHandler {
         // process request, get the response and calcuate the first byte time
         let result = route_conf.to_response(&self, (request, manager.clone(), downstream_metadata.clone())).await;
 
-        #[cfg (feature = "access-log")]
+        #[cfg(feature = "access-log")]
         let first_byte_instant = Instant::now();
 
         result.map(|mut response| {
             // set the request id on the response...
             manager.request_id_handler.apply_to(&mut response, self.request_id.propagate_ref());
 
-            #[cfg (feature = "access-log")]
+            #[cfg(feature = "access-log")]
             let initial_flags = response.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
-            #[cfg (feature = "access-log")]
+            #[cfg(feature = "access-log")]
             if let Some(ctx) = self.access_log_ctx.as_ref() {
                 let response_head_size = response_head_size(&response);
                 ctx.access_loggers.lock().with_context(&DownstreamResponse { response: &response, response_head_size })
             }
 
-            #[cfg (feature = "metrics")]
+            #[cfg(feature = "metrics")]
             let resp_head_size = response_head_size(&response);
 
             response.map(move |body| {
                 BodyWithMetrics::new(BodyKind::Response, body, move |_nbytes, _flags| {
-                    #[cfg (any(feature = "access-log", feature = "tracing"))]
+                    #[cfg(any(feature = "access-log", feature = "tracing"))]
                     let is_transaction_complete = self.completed_phases.fetch_add(1, Ordering::Relaxed) > 0;
 
                     with_metric!(
@@ -593,7 +579,7 @@ impl TransactionHandler {
                         &[KeyValue::new("listener", _listener_name)]
                     );
 
-                    #[cfg (feature = "access-log")]
+                    #[cfg(feature = "access-log")]
                     if let Some(ctx) = self.access_log_ctx.as_ref() {
                         let mut access_loggers = ctx.access_loggers.lock();
                         let duration = first_byte_instant.saturating_duration_since(self.start_instant);
@@ -605,7 +591,7 @@ impl TransactionHandler {
                                 access_loggers.as_mut(),
                                 self.start_instant,
                                 ctx.bytes.load(Ordering::Relaxed), // bytes received
-                                _nbytes,                            // bytes sent
+                                _nbytes,                           // bytes sent
                                 _listener_name,
                                 initial_flags | _flags,
                                 permit,
@@ -615,7 +601,7 @@ impl TransactionHandler {
                         }
                     }
 
-                    #[cfg (feature = "tracing")]
+                    #[cfg(feature = "tracing")]
                     if is_transaction_complete {
                         if let Some(span) = self.span_state.as_ref() {
                             span.end();
@@ -918,7 +904,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
         ));
 
         // 4. update tracing headers...
-        #[cfg (feature = "tracing")]
+        #[cfg(feature = "tracing")]
         if let Some(trace_ctx) = trans_handler.trace_ctx.as_ref() {
             self.manager.http_tracer.update_tracing_headers(trace_ctx, &mut updated_request);
         }
@@ -956,7 +942,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             let request = Request::from_parts(parts, BodyWithTimeout::new(req_timeout, body));
 
             #[cfg(feature = "access-log")]
-            let permit : Option<ShareableAccessLogPermit> = {
+            let permit: Option<ShareableAccessLogPermit> = {
                 if is_access_log_enabled() {
                     Some(log_access_reserve_balanced().await)
                 } else {
@@ -982,18 +968,18 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             //
             // 2. create the MetricsBody, which will track the size of the request body
 
-            #[cfg (feature = "access-log")]
+            #[cfg(feature = "access-log")]
             let init_flags = request.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
-            #[cfg (feature = "metrics")]
+            #[cfg(feature = "metrics")]
             let req_head_size = request_head_size(&request);
 
             let request = request.map(|body| {
-                #[cfg (any(feature = "access-log", feature = "tracing", feature = "metrics"))]
+                #[cfg(any(feature = "access-log", feature = "tracing", feature = "metrics"))]
                 let trans_handler = Arc::clone(&trans_handler);
 
                 BodyWithMetrics::new(BodyKind::Request, body, move |_nbytes, _flags| {
-                    #[cfg (any(feature = "access-log", feature = "tracing"))]
+                    #[cfg(any(feature = "access-log", feature = "tracing"))]
                     let is_transaction_complete = trans_handler.completed_phases.fetch_add(1, Ordering::Relaxed) > 0;
 
                     with_metric!(
@@ -1005,7 +991,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                     );
 
                     // emit the access log, if the request is completed..
-                    #[cfg (feature = "access-log")]
+                    #[cfg(feature = "access-log")]
                     if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
                         let mut access_loggers = ctx.access_loggers.lock();
                         let duration = trans_handler.start_instant.elapsed();
@@ -1016,7 +1002,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                             eval_http_finish_context(
                                 access_loggers.as_mut(),
                                 trans_handler.start_instant,
-                                _nbytes,                            // bytes received
+                                _nbytes,                           // bytes received
                                 ctx.bytes.load(Ordering::Relaxed), // bytes sent
                                 listener_name,
                                 init_flags | _flags,
@@ -1027,7 +1013,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                         }
                     }
 
-                    #[cfg (feature = "tracing")]
+                    #[cfg(feature = "tracing")]
                     if is_transaction_complete {
                         if let Some(span) = trans_handler.span_state.as_ref() {
                             span.end();
@@ -1040,7 +1026,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                 // immediately return a SyntheticHttpResponse, and calcuate the first byte instant
                 let resp = SyntheticHttpResponse::not_found().into_response(request.version());
 
-                #[cfg (feature = "access-log")]
+                #[cfg(feature = "access-log")]
                 let first_byte_instant = Instant::now();
 
                 with_metric!(
@@ -1067,12 +1053,12 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                 #[cfg(feature = "access-log")]
                 let init_flags = resp.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
 
-                #[cfg (feature = "metrics")]
+                #[cfg(feature = "metrics")]
                 let resp_head_size = response_head_size(&resp);
 
                 let response = resp.map(|body| {
                     BodyWithMetrics::new(BodyKind::Response, body, move |_nbytes, _flags| {
-                        #[cfg (any(feature = "access-log", feature = "tracing"))]
+                        #[cfg(any(feature = "access-log", feature = "tracing"))]
                         let is_transaction_complete =
                             trans_handler.completed_phases.fetch_add(1, Ordering::Relaxed) > 0;
 
@@ -1096,7 +1082,7 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                                     access_loggers.as_mut(),
                                     trans_handler.start_instant,
                                     ctx.bytes.load(Ordering::Relaxed), // bytes received
-                                    _nbytes,                            // bytes sent
+                                    _nbytes,                           // bytes sent
                                     listener_name,
                                     init_flags | _flags,
                                     permit,
@@ -1117,10 +1103,15 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
                 return Ok(response);
             };
 
-            let response = Arc::clone(&trans_handler).
-                handle_transaction(route_conf, manager, request, downstream_metadata,
-                    #[cfg (feature = "access-log")]
-                    permit)
+            let response = Arc::clone(&trans_handler)
+                .handle_transaction(
+                    route_conf,
+                    manager,
+                    request,
+                    downstream_metadata,
+                    #[cfg(feature = "access-log")]
+                    permit,
+                )
                 .await;
 
             trans_handler.trace_status_code(response, listener_name)
@@ -1134,11 +1125,10 @@ fn eval_http_init_context<R>(request: &Request<R>, trans_handler: &TransactionHa
     let trace_id =
         trans_handler.trace_ctx.as_ref().and_then(|t| t.map_child(orion_tracing::trace_info::TraceInfo::trace_id));
     #[cfg(not(feature = "tracing"))]
-    let trace_id : Option<u128> = None;
+    let trace_id: Option<u128> = None;
 
     #[cfg(feature = "access-log")]
     if let Some(ctx) = trans_handler.access_log_ctx.as_ref() {
-
         let request_head_size = request_head_size(request);
         ctx.access_loggers.lock().with_context_fn(|| InitHttpContext {
             start_time: std::time::SystemTime::now(),

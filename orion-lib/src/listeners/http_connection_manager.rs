@@ -29,7 +29,6 @@ mod redirect;
 mod route;
 mod upgrades;
 
-use ::http::HeaderValue;
 use arc_swap::ArcSwap;
 use core::time::Duration;
 use futures::future::BoxFuture;
@@ -458,7 +457,7 @@ impl AccessLoggersContext {
 #[derive(Debug)]
 pub struct TransactionHandler {
     start_instant: std::time::Instant,
-    request_id: RequestId,
+    request_id: Option<RequestId>,
     completed_phases: AtomicU8,
     thread_id: ThreadId,
     #[cfg(feature = "access-log")]
@@ -473,7 +472,7 @@ impl Default for TransactionHandler {
     fn default() -> Self {
         TransactionHandler {
             start_instant: std::time::Instant::now(),
-            request_id: RequestId::Internal(HeaderValue::from_static("")),
+            request_id: None,
             completed_phases: AtomicU8::new(0),
             thread_id: std::thread::current().id(),
             #[cfg(feature = "access-log")]
@@ -489,7 +488,7 @@ impl Default for TransactionHandler {
 impl TransactionHandler {
     #[allow(clippy::used_underscore_binding)]
     pub fn new(
-        request_id: RequestId,
+        request_id: Option<RequestId>,
         thread_id: ThreadId,
         #[cfg(feature = "access-log")] access_log: &[AccessLog],
         #[cfg(feature = "tracing")] trace_ctx: Option<TraceContext>,
@@ -552,7 +551,9 @@ impl TransactionHandler {
 
         result.map(|mut response| {
             // set the request id on the response...
-            manager.request_id_handler.apply_to(&mut response, self.request_id.propagate_ref());
+            manager
+                .request_id_handler
+                .apply_to(&mut response, self.request_id.as_ref().and_then(|x| x.propagate_ref()));
 
             #[cfg(feature = "access-log")]
             let initial_flags = response.extensions().get::<ResponseFlags>().cloned().unwrap_or_default();
@@ -748,7 +749,7 @@ impl
             Arc<DownstreamConnectionMetadata>,
         ),
     ) -> Result<Response<PolyBody>> {
-        let mut processed_routes: HashSet<RouteMatch> = HashSet::new();
+        let mut processed_routes: HashSet<&RouteMatch> = HashSet::new();
         let mut cached_route = match_request_route(&request, &self);
 
         loop {
@@ -781,7 +782,7 @@ impl
                     if !is_reroute {
                         break;
                     }
-                    processed_routes.insert(chosen_route.route.route_match.clone());
+                    processed_routes.insert(&chosen_route.route.route_match);
                     cached_route = match_request_route(&request, &self);
                 } else {
                     // there are no filters to process
@@ -863,19 +864,30 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
         // 0. destructure the ExtendedRequest to get the request and addresses
         let ExtendedRequest { request, downstream_metadata } = req;
 
-        #[cfg(feature = "tracing")]
         let incoming_request_id = RequestId::from_request(&request);
+
+        let access_log_enabled = {
+            #[cfg(feature = "access-log")]
+            {
+                is_access_log_enabled()
+            }
+            #[cfg(not(feature = "access-log"))]
+            {
+                false
+            }
+        };
 
         // 1. apply x_request_id policy first...
         #[allow(unused_mut)]
-        let (mut updated_request, request_id) = self.manager.request_id_handler.apply_policy(request);
+        let (mut updated_request, request_id) =
+            self.manager.request_id_handler.apply_policy(request, access_log_enabled, incoming_request_id.as_ref());
 
         // 2. create a trace context and SERVER span, if enabled...
         #[cfg(feature = "tracing")]
         let trace_context = self
             .manager
             .http_tracer
-            .try_build_trace_context(&updated_request, incoming_request_id.as_ref().or(Some(&request_id)));
+            .try_build_trace_context(&updated_request, incoming_request_id.or(request_id.clone()));
 
         #[cfg(feature = "tracing")]
         let mut server_span = self.manager.http_tracer.try_create_span(
@@ -931,17 +943,20 @@ impl Service<ExtendedRequest<Incoming>> for HttpRequestHandler {
             trans_handler.thread_id(),
             &[KeyValue::new("listener", listener_name)]
         );
+
+        #[cfg(feature = "metrics")]
+        let thread_id = trans_handler.thread_id();
         defer! {
-            with_metric!(http::DOWNSTREAM_RQ_ACTIVE, sub, 1, trans_handler.thread_id(), &[KeyValue::new("listener", listener_name)]);
+            with_metric!(http::DOWNSTREAM_RQ_ACTIVE, sub, 1, thread_id, &[KeyValue::new("listener", listener_name)]);
         }
 
-        let trans_handler = trans_handler.clone();
         Box::pin(async move {
             let ExtendedRequest { request, downstream_metadata } = req;
             let (parts, body) = request.into_parts();
             let request = Request::from_parts(parts, BodyWithTimeout::new(req_timeout, body));
 
             #[cfg(feature = "access-log")]
+            #[allow(clippy::if_then_some_else_none)] // false positive
             let permit: Option<ShareableAccessLogPermit> = {
                 if is_access_log_enabled() {
                     Some(log_access_reserve_balanced().await)

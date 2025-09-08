@@ -72,7 +72,7 @@ impl HttpTracer {
 
     /// Analyzes request headers to decide if and how to trace.
     ///
-    pub fn try_build_trace_context<B>(&self, req: &Request<B>, request_id: Option<&RequestId>) -> Option<TraceContext> {
+    pub fn try_build_trace_context<B>(&self, req: &Request<B>, request_id: Option<RequestId>) -> Option<TraceContext> {
         let tracing = self.tracing.as_ref()?;
         let headers = req.headers();
         let x_client_trace_id = headers.get(X_CLIENT_TRACE_ID);
@@ -81,7 +81,7 @@ impl HttpTracer {
             return Some(
                 TraceContext::new(None)
                     .with_parent(parent_trace_id.clone())
-                    .with_request_id(request_id.cloned())
+                    .with_request_id(request_id)
                     .with_client_trace_id(x_client_trace_id.cloned()),
             );
         }
@@ -91,9 +91,7 @@ impl HttpTracer {
         let forced = headers.contains_key(X_ENVOY_FORCE_TRACE);
 
         let dont_trace = || {
-            TraceContext::new(None)
-                .with_client_trace_id(x_client_trace_id.cloned())
-                .with_request_id(request_id.cloned())
+            TraceContext::new(None).with_client_trace_id(x_client_trace_id.cloned()).with_request_id(request_id.clone())
         };
 
         // 1. trigger: x_client_trace_id...
@@ -103,7 +101,7 @@ impl HttpTracer {
             {
                 return Some(
                     TraceContext::new(Some(trace_id))
-                        .with_request_id(request_id.cloned())
+                        .with_request_id(request_id)
                         .with_should_sample(true)
                         .with_client_trace_id(x_client_trace_id.cloned()),
                 );
@@ -119,7 +117,7 @@ impl HttpTracer {
             {
                 return Some(
                     TraceContext::new(Some(trace_id))
-                        .with_request_id(request_id.cloned())
+                        .with_request_id(request_id)
                         .with_should_sample(true)
                         .with_client_trace_id(x_client_trace_id.cloned()),
                 );
@@ -135,7 +133,7 @@ impl HttpTracer {
             return Some(
                 TraceContext::new(None)
                     .with_child(TraceInfo::new(true, TraceProvider::W3CTraceContext, None))
-                    .with_request_id(request_id.cloned())
+                    .with_request_id(request_id)
                     .with_should_sample(true)
                     .with_client_trace_id(x_client_trace_id.cloned()),
             );
@@ -335,7 +333,7 @@ mod tests {
 
         let context = tracer.try_build_trace_context(
             &req,
-            Some(&RequestId::Propagate(HeaderValue::from_static("9b13f5d0-9c42-4d27-a34f-08b7a8a5601a"))),
+            Some(RequestId::Propagate(HeaderValue::from_static("9b13f5d0-9c42-4d27-a34f-08b7a8a5601a"))),
         );
 
         let span = tracer.try_create_span(
